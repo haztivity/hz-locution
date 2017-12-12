@@ -1,6 +1,6 @@
 {
   "name": "@haztivity/hz-locution",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Haztivity resource for locutions",
   "main": "dist/HzLocution.js",
   "module": "dist/HzLocution.js",
