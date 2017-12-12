@@ -1,0 +1,9 @@
+div
+    h1 Audio after other resource
+    button(data-hz-resource="HzAnim"
+    data-opt-hz-anim-on="click"
+    data-opt-hz-anim-do="transition.fadeIn"
+    data-opt-hz-anim-with={duration:1000},
+    data-opt-hz-anim-to=".target") Do to .target
+    //- The locution will be auto executed when the animation ends
+    p.target(data-hz-resource="HzLocution", data-opt-hz-locution-files="./assets/short.mp3", style="display:none") Here the text with locution

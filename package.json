@@ -1,0 +1,50 @@
+{
+  "name": "@haztivity/hz-locution",
+  "version": "0.6.0",
+  "description": "Haztivity resource for locutions",
+  "main": "dist/HzLocution.js",
+  "module": "dist/HzLocution.js",
+  "scripts": {
+    "build": "tsc -p src",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/haztivity/hz-locution.git"
+  },
+  "directories": {
+    "typings": "src"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "types": "src/HzLocution.ts",
+  "typings": "src/HzLocution.ts",
+  "author": "Davinchi",
+  "license": "MIT",
+  "homepage": "https://github.com/haztivity/hz-locution/",
+  "dependencies": {
+    "@haztivity/core": "^0.6.x",
+    "howler": "^2.0.5",
+    "soundmanager2": "^2.97.20170602"
+  },
+  "devDependencies": {
+    "@haztivity/cli": "^0.3.0",
+    "@haztivity/hz-anim": "^0.6.3",
+    "@haztivity/hz-navbar": "^0.6.5",
+    "@types/core-js": "^0.9.42",
+    "@types/jquery": "^3.2.6",
+    "@types/loglevel": "^1.4.29",
+    "@types/prismjs": "^1.6.2",
+    "@types/string": "0.0.29",
+    "autoprefixer": "^7.1.2",
+    "commander": "^2.11.0",
+    "jstransformer-markdown-it": "^2.0.0",
+    "merge2": "^1.1.0",
+    "postcss": "^6.0.6",
+    "prismjs": "^1.6.0",
+    "pug": "^2.0.0-rc.2",
+    "require-dir": "^0.3.2",
+    "typescript": "^2.4.1"
+  }
+}
