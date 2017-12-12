@@ -1,6 +1,6 @@
-# hz-quiz
-hz-quiz is an haztivity resource to add locutions.\
-hz-quiz uses [howler js](https://github.com/goldfire/howler.js) under the hood.
+# hz-locution
+hz-locution is an haztivity resource to add locutions.\
+hz-locution uses [howler js](https://github.com/goldfire/howler.js) under the hood.
 ## Install
 ### NPM
 ```npm i --save @haztivity/hz-locution```
