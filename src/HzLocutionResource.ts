@@ -42,7 +42,8 @@ export class HzLocutionResource extends ResourceController {
     };
     protected static readonly DEFAULTS = {
         playOn:"auto",
-        completeOnPlay:false
+        completeOnPlay:false,
+        completeOnStop:false
     };
     protected _config:any;
     protected _sound;
@@ -70,7 +71,7 @@ export class HzLocutionResource extends ResourceController {
         sound.on("playerror",this._onPlayError.bind(this));
         sound.on("play",this._onPlay.bind(this));
         this._sound = sound;
-        if(this._options.playOn != "auto"){
+        if(this._options.playOn != "auto" && this._options.playOn != "none"){
             let config = this._options.playOn,
                 playOn = config.split(":"),
                 event = playOn[0],
@@ -112,7 +113,11 @@ export class HzLocutionResource extends ResourceController {
             this._markAsCompleted();
         }
     }
-    public play(delay=true){
+    public play(force=false){
+        if(force){
+            this._unlock();
+            this.enable();
+        }
         if(!this.isDisabled() && this._sound){
             //stop the current audio
             if(HzLocutionRuntime.currentAudio){
@@ -129,6 +134,9 @@ export class HzLocutionResource extends ResourceController {
     public stop(){
         if(this._sound){
             this._sound.stop();
+            if(this._options.completeOnStop){
+                this._markAsCompleted();
+            }
         }
     }
     public disable(){
