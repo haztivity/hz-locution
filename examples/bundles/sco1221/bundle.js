@@ -1,6 +1,6 @@
 (function(FuseBox){FuseBox.$fuse$=FuseBox;
 /*!
- * jQuery JavaScript Library v3.2.1
+ * jQuery JavaScript Library v3.3.1
  * https://jquery.com/
  *
  * Includes Sizzle.js
@@ -10,7 +10,7 @@
  * Released under the MIT license
  * https://jquery.org/license
  *
- * Date: 2017-03-20T18:59Z
+ * Date: 2018-01-20T17:24Z
  */
 ( function( global, factory ) {
 
@@ -72,16 +72,57 @@ var ObjectFunctionString = fnToString.call( Object );
 
 var support = {};
 
+var isFunction = function isFunction( obj ) {
+
+      // Support: Chrome <=57, Firefox <=52
+      // In some browsers, typeof returns "function" for HTML <object> elements
+      // (i.e., `typeof document.createElement( "object" ) === "function"`).
+      // We don't want to classify *any* DOM node as a function.
+      return typeof obj === "function" && typeof obj.nodeType !== "number";
+  };
 
 
-	function DOMEval( code, doc ) {
+var isWindow = function isWindow( obj ) {
+		return obj != null && obj === obj.window;
+	};
+
+
+
+
+	var preservedScriptAttributes = {
+		type: true,
+		src: true,
+		noModule: true
+	};
+
+	function DOMEval( code, doc, node ) {
 		doc = doc || document;
 
-		var script = doc.createElement( "script" );
+		var i,
+			script = doc.createElement( "script" );
 
 		script.text = code;
+		if ( node ) {
+			for ( i in preservedScriptAttributes ) {
+				if ( node[ i ] ) {
+					script[ i ] = node[ i ];
+				}
+			}
+		}
 		doc.head.appendChild( script ).parentNode.removeChild( script );
 	}
+
+
+function toType( obj ) {
+	if ( obj == null ) {
+		return obj + "";
+	}
+
+	// Support: Android <=2.3 only (functionish RegExp)
+	return typeof obj === "object" || typeof obj === "function" ?
+		class2type[ toString.call( obj ) ] || "object" :
+		typeof obj;
+}
 /* global Symbol */
 // Defining this global in .eslintrc.json would create a danger of using the global
 // unguarded in another place, it seems safer to define global only for this module
@@ -89,7 +130,7 @@ var support = {};
 
 
 var
-	version = "3.2.1",
+	version = "3.3.1",
 
 	// Define a local copy of jQuery
 	jQuery = function( selector, context ) {
@@ -101,16 +142,7 @@ var
 
 	// Support: Android <=4.0 only
 	// Make sure we trim BOM and NBSP
-	rtrim = /^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g,
-
-	// Matches dashed string for camelizing
-	rmsPrefix = /^-ms-/,
-	rdashAlpha = /-([a-z])/g,
-
-	// Used by jQuery.camelCase as callback to replace()
-	fcamelCase = function( all, letter ) {
-		return letter.toUpperCase();
-	};
+	rtrim = /^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g;
 
 jQuery.fn = jQuery.prototype = {
 
@@ -210,7 +242,7 @@ jQuery.extend = jQuery.fn.extend = function() {
 	}
 
 	// Handle case when target is a string or something (possible in deep copy)
-	if ( typeof target !== "object" && !jQuery.isFunction( target ) ) {
+	if ( typeof target !== "object" && !isFunction( target ) ) {
 		target = {};
 	}
 
@@ -276,28 +308,6 @@ jQuery.extend( {
 
 	noop: function() {},
 
-	isFunction: function( obj ) {
-		return jQuery.type( obj ) === "function";
-	},
-
-	isWindow: function( obj ) {
-		return obj != null && obj === obj.window;
-	},
-
-	isNumeric: function( obj ) {
-
-		// As of jQuery 3.0, isNumeric is limited to
-		// strings and numbers (primitives or objects)
-		// that can be coerced to finite numbers (gh-2662)
-		var type = jQuery.type( obj );
-		return ( type === "number" || type === "string" ) &&
-
-			// parseFloat NaNs numeric-cast false positives ("")
-			// ...but misinterprets leading-number strings, particularly hex literals ("0x...")
-			// subtraction forces infinities to NaN
-			!isNaN( obj - parseFloat( obj ) );
-	},
-
 	isPlainObject: function( obj ) {
 		var proto, Ctor;
 
@@ -331,27 +341,9 @@ jQuery.extend( {
 		return true;
 	},
 
-	type: function( obj ) {
-		if ( obj == null ) {
-			return obj + "";
-		}
-
-		// Support: Android <=2.3 only (functionish RegExp)
-		return typeof obj === "object" || typeof obj === "function" ?
-			class2type[ toString.call( obj ) ] || "object" :
-			typeof obj;
-	},
-
 	// Evaluates a script in a global context
 	globalEval: function( code ) {
 		DOMEval( code );
-	},
-
-	// Convert dashed to camelCase; used by the css and data modules
-	// Support: IE <=9 - 11, Edge 12 - 13
-	// Microsoft forgot to hump their vendor prefix (#9572)
-	camelCase: function( string ) {
-		return string.replace( rmsPrefix, "ms-" ).replace( rdashAlpha, fcamelCase );
 	},
 
 	each: function( obj, callback ) {
@@ -474,37 +466,6 @@ jQuery.extend( {
 	// A global GUID counter for objects
 	guid: 1,
 
-	// Bind a function to a context, optionally partially applying any
-	// arguments.
-	proxy: function( fn, context ) {
-		var tmp, args, proxy;
-
-		if ( typeof context === "string" ) {
-			tmp = fn[ context ];
-			context = fn;
-			fn = tmp;
-		}
-
-		// Quick check to determine if target is callable, in the spec
-		// this throws a TypeError, but we will just return undefined.
-		if ( !jQuery.isFunction( fn ) ) {
-			return undefined;
-		}
-
-		// Simulated bind
-		args = slice.call( arguments, 2 );
-		proxy = function() {
-			return fn.apply( context || this, args.concat( slice.call( arguments ) ) );
-		};
-
-		// Set the guid of unique handler to the same of original handler, so it can be removed
-		proxy.guid = fn.guid = fn.guid || jQuery.guid++;
-
-		return proxy;
-	},
-
-	now: Date.now,
-
 	// jQuery.support is not used in Core but other projects attach their
 	// properties to it so it needs to exist.
 	support: support
@@ -527,9 +488,9 @@ function isArrayLike( obj ) {
 	// hasOwn isn't used here due to false negatives
 	// regarding Nodelist length in IE
 	var length = !!obj && "length" in obj && obj.length,
-		type = jQuery.type( obj );
+		type = toType( obj );
 
-	if ( type === "function" || jQuery.isWindow( obj ) ) {
+	if ( isFunction( obj ) || isWindow( obj ) ) {
 		return false;
 	}
 
@@ -2849,11 +2810,9 @@ var rsingleTag = ( /^<([a-z][^\/\0>:\x20\t\r\n\f]*)[\x20\t\r\n\f]*\/?>(?:<\/\1>|
 
 
 
-var risSimple = /^.[^:#\[\.,]*$/;
-
 // Implement the identical functionality for filter and not
 function winnow( elements, qualifier, not ) {
-	if ( jQuery.isFunction( qualifier ) ) {
+	if ( isFunction( qualifier ) ) {
 		return jQuery.grep( elements, function( elem, i ) {
 			return !!qualifier.call( elem, i, elem ) !== not;
 		} );
@@ -2873,16 +2832,8 @@ function winnow( elements, qualifier, not ) {
 		} );
 	}
 
-	// Simple selector that can be filtered directly, removing non-Elements
-	if ( risSimple.test( qualifier ) ) {
-		return jQuery.filter( qualifier, elements, not );
-	}
-
-	// Complex selector, compare the two sets, removing non-Elements
-	qualifier = jQuery.filter( qualifier, elements );
-	return jQuery.grep( elements, function( elem ) {
-		return ( indexOf.call( qualifier, elem ) > -1 ) !== not && elem.nodeType === 1;
-	} );
+	// Filtered directly for both simple and complex selectors
+	return jQuery.filter( qualifier, elements, not );
 }
 
 jQuery.filter = function( expr, elems, not ) {
@@ -3003,7 +2954,7 @@ var rootjQuery,
 						for ( match in context ) {
 
 							// Properties of context are called as methods if possible
-							if ( jQuery.isFunction( this[ match ] ) ) {
+							if ( isFunction( this[ match ] ) ) {
 								this[ match ]( context[ match ] );
 
 							// ...and otherwise set as attributes
@@ -3046,7 +2997,7 @@ var rootjQuery,
 
 		// HANDLE: $(function)
 		// Shortcut for document ready
-		} else if ( jQuery.isFunction( selector ) ) {
+		} else if ( isFunction( selector ) ) {
 			return root.ready !== undefined ?
 				root.ready( selector ) :
 
@@ -3361,11 +3312,11 @@ jQuery.Callbacks = function( options ) {
 
 					( function add( args ) {
 						jQuery.each( args, function( _, arg ) {
-							if ( jQuery.isFunction( arg ) ) {
+							if ( isFunction( arg ) ) {
 								if ( !options.unique || !self.has( arg ) ) {
 									list.push( arg );
 								}
-							} else if ( arg && arg.length && jQuery.type( arg ) !== "string" ) {
+							} else if ( arg && arg.length && toType( arg ) !== "string" ) {
 
 								// Inspect recursively
 								add( arg );
@@ -3480,11 +3431,11 @@ function adoptValue( value, resolve, reject, noValue ) {
 	try {
 
 		// Check for promise aspect first to privilege synchronous behavior
-		if ( value && jQuery.isFunction( ( method = value.promise ) ) ) {
+		if ( value && isFunction( ( method = value.promise ) ) ) {
 			method.call( value ).done( resolve ).fail( reject );
 
 		// Other thenables
-		} else if ( value && jQuery.isFunction( ( method = value.then ) ) ) {
+		} else if ( value && isFunction( ( method = value.then ) ) ) {
 			method.call( value, resolve, reject );
 
 		// Other non-thenables
@@ -3542,14 +3493,14 @@ jQuery.extend( {
 						jQuery.each( tuples, function( i, tuple ) {
 
 							// Map tuples (progress, done, fail) to arguments (done, fail, progress)
-							var fn = jQuery.isFunction( fns[ tuple[ 4 ] ] ) && fns[ tuple[ 4 ] ];
+							var fn = isFunction( fns[ tuple[ 4 ] ] ) && fns[ tuple[ 4 ] ];
 
 							// deferred.progress(function() { bind to newDefer or newDefer.notify })
 							// deferred.done(function() { bind to newDefer or newDefer.resolve })
 							// deferred.fail(function() { bind to newDefer or newDefer.reject })
 							deferred[ tuple[ 1 ] ]( function() {
 								var returned = fn && fn.apply( this, arguments );
-								if ( returned && jQuery.isFunction( returned.promise ) ) {
+								if ( returned && isFunction( returned.promise ) ) {
 									returned.promise()
 										.progress( newDefer.notify )
 										.done( newDefer.resolve )
@@ -3603,7 +3554,7 @@ jQuery.extend( {
 										returned.then;
 
 									// Handle a returned thenable
-									if ( jQuery.isFunction( then ) ) {
+									if ( isFunction( then ) ) {
 
 										// Special processors (notify) just wait for resolution
 										if ( special ) {
@@ -3699,7 +3650,7 @@ jQuery.extend( {
 							resolve(
 								0,
 								newDefer,
-								jQuery.isFunction( onProgress ) ?
+								isFunction( onProgress ) ?
 									onProgress :
 									Identity,
 								newDefer.notifyWith
@@ -3711,7 +3662,7 @@ jQuery.extend( {
 							resolve(
 								0,
 								newDefer,
-								jQuery.isFunction( onFulfilled ) ?
+								isFunction( onFulfilled ) ?
 									onFulfilled :
 									Identity
 							)
@@ -3722,7 +3673,7 @@ jQuery.extend( {
 							resolve(
 								0,
 								newDefer,
-								jQuery.isFunction( onRejected ) ?
+								isFunction( onRejected ) ?
 									onRejected :
 									Thrower
 							)
@@ -3762,8 +3713,15 @@ jQuery.extend( {
 					// fulfilled_callbacks.disable
 					tuples[ 3 - i ][ 2 ].disable,
 
+					// rejected_handlers.disable
+					// fulfilled_handlers.disable
+					tuples[ 3 - i ][ 3 ].disable,
+
 					// progress_callbacks.lock
-					tuples[ 0 ][ 2 ].lock
+					tuples[ 0 ][ 2 ].lock,
+
+					// progress_handlers.lock
+					tuples[ 0 ][ 3 ].lock
 				);
 			}
 
@@ -3833,7 +3791,7 @@ jQuery.extend( {
 
 			// Use .then() to unwrap secondary thenables (cf. gh-3000)
 			if ( master.state() === "pending" ||
-				jQuery.isFunction( resolveValues[ i ] && resolveValues[ i ].then ) ) {
+				isFunction( resolveValues[ i ] && resolveValues[ i ].then ) ) {
 
 				return master.then();
 			}
@@ -3961,7 +3919,7 @@ var access = function( elems, fn, key, value, chainable, emptyGet, raw ) {
 		bulk = key == null;
 
 	// Sets many values
-	if ( jQuery.type( key ) === "object" ) {
+	if ( toType( key ) === "object" ) {
 		chainable = true;
 		for ( i in key ) {
 			access( elems, fn, i, key[ i ], true, emptyGet, raw );
@@ -3971,7 +3929,7 @@ var access = function( elems, fn, key, value, chainable, emptyGet, raw ) {
 	} else if ( value !== undefined ) {
 		chainable = true;
 
-		if ( !jQuery.isFunction( value ) ) {
+		if ( !isFunction( value ) ) {
 			raw = true;
 		}
 
@@ -4013,6 +3971,23 @@ var access = function( elems, fn, key, value, chainable, emptyGet, raw ) {
 
 	return len ? fn( elems[ 0 ], key ) : emptyGet;
 };
+
+
+// Matches dashed string for camelizing
+var rmsPrefix = /^-ms-/,
+	rdashAlpha = /-([a-z])/g;
+
+// Used by camelCase as callback to replace()
+function fcamelCase( all, letter ) {
+	return letter.toUpperCase();
+}
+
+// Convert dashed to camelCase; used by the css and data modules
+// Support: IE <=9 - 11, Edge 12 - 15
+// Microsoft forgot to hump their vendor prefix (#9572)
+function camelCase( string ) {
+	return string.replace( rmsPrefix, "ms-" ).replace( rdashAlpha, fcamelCase );
+}
 var acceptData = function( owner ) {
 
 	// Accepts only:
@@ -4075,14 +4050,14 @@ Data.prototype = {
 		// Handle: [ owner, key, value ] args
 		// Always use camelCase key (gh-2257)
 		if ( typeof data === "string" ) {
-			cache[ jQuery.camelCase( data ) ] = value;
+			cache[ camelCase( data ) ] = value;
 
 		// Handle: [ owner, { properties } ] args
 		} else {
 
 			// Copy the properties one-by-one to the cache object
 			for ( prop in data ) {
-				cache[ jQuery.camelCase( prop ) ] = data[ prop ];
+				cache[ camelCase( prop ) ] = data[ prop ];
 			}
 		}
 		return cache;
@@ -4092,7 +4067,7 @@ Data.prototype = {
 			this.cache( owner ) :
 
 			// Always use camelCase key (gh-2257)
-			owner[ this.expando ] && owner[ this.expando ][ jQuery.camelCase( key ) ];
+			owner[ this.expando ] && owner[ this.expando ][ camelCase( key ) ];
 	},
 	access: function( owner, key, value ) {
 
@@ -4140,9 +4115,9 @@ Data.prototype = {
 
 				// If key is an array of keys...
 				// We always set camelCase keys, so remove that.
-				key = key.map( jQuery.camelCase );
+				key = key.map( camelCase );
 			} else {
-				key = jQuery.camelCase( key );
+				key = camelCase( key );
 
 				// If a key with the spaces exists, use it.
 				// Otherwise, create an array by matching non-whitespace
@@ -4288,7 +4263,7 @@ jQuery.fn.extend( {
 						if ( attrs[ i ] ) {
 							name = attrs[ i ].name;
 							if ( name.indexOf( "data-" ) === 0 ) {
-								name = jQuery.camelCase( name.slice( 5 ) );
+								name = camelCase( name.slice( 5 ) );
 								dataAttr( elem, name, data[ name ] );
 							}
 						}
@@ -4535,8 +4510,7 @@ var swap = function( elem, options, callback, args ) {
 
 
 function adjustCSS( elem, prop, valueParts, tween ) {
-	var adjusted,
-		scale = 1,
+	var adjusted, scale,
 		maxIterations = 20,
 		currentValue = tween ?
 			function() {
@@ -4554,30 +4528,33 @@ function adjustCSS( elem, prop, valueParts, tween ) {
 
 	if ( initialInUnit && initialInUnit[ 3 ] !== unit ) {
 
+		// Support: Firefox <=54
+		// Halve the iteration target value to prevent interference from CSS upper bounds (gh-2144)
+		initial = initial / 2;
+
 		// Trust units reported by jQuery.css
 		unit = unit || initialInUnit[ 3 ];
-
-		// Make sure we update the tween properties later on
-		valueParts = valueParts || [];
 
 		// Iteratively approximate from a nonzero starting point
 		initialInUnit = +initial || 1;
 
-		do {
+		while ( maxIterations-- ) {
 
-			// If previous iteration zeroed out, double until we get *something*.
-			// Use string for doubling so we don't accidentally see scale as unchanged below
-			scale = scale || ".5";
-
-			// Adjust and apply
-			initialInUnit = initialInUnit / scale;
+			// Evaluate and update our best guess (doubling guesses that zero out).
+			// Finish if the scale equals or crosses 1 (making the old*new product non-positive).
 			jQuery.style( elem, prop, initialInUnit + unit );
+			if ( ( 1 - scale ) * ( 1 - ( scale = currentValue() / initial || 0.5 ) ) <= 0 ) {
+				maxIterations = 0;
+			}
+			initialInUnit = initialInUnit / scale;
 
-		// Update scale, tolerating zero or NaN from tween.cur()
-		// Break the loop if scale is unchanged or perfect, or if we've just had enough.
-		} while (
-			scale !== ( scale = currentValue() / initial ) && scale !== 1 && --maxIterations
-		);
+		}
+
+		initialInUnit = initialInUnit * 2;
+		jQuery.style( elem, prop, initialInUnit + unit );
+
+		// Make sure we update the tween properties later on
+		valueParts = valueParts || [];
 	}
 
 	if ( valueParts ) {
@@ -4695,7 +4672,7 @@ var rcheckableType = ( /^(?:checkbox|radio)$/i );
 
 var rtagName = ( /<([a-z][^\/\0>\x20\t\r\n\f]+)/i );
 
-var rscriptType = ( /^$|\/(?:java|ecma)script/i );
+var rscriptType = ( /^$|^module$|\/(?:java|ecma)script/i );
 
 
 
@@ -4777,7 +4754,7 @@ function buildFragment( elems, context, scripts, selection, ignored ) {
 		if ( elem || elem === 0 ) {
 
 			// Add nodes directly
-			if ( jQuery.type( elem ) === "object" ) {
+			if ( toType( elem ) === "object" ) {
 
 				// Support: Android <=4.0 only, PhantomJS 1 only
 				// push.apply(_, arraylike) throws on ancient WebKit
@@ -5287,7 +5264,7 @@ jQuery.event = {
 			enumerable: true,
 			configurable: true,
 
-			get: jQuery.isFunction( hook ) ?
+			get: isFunction( hook ) ?
 				function() {
 					if ( this.originalEvent ) {
 							return hook( this.originalEvent );
@@ -5422,7 +5399,7 @@ jQuery.Event = function( src, props ) {
 	}
 
 	// Create a timestamp if incoming event doesn't have one
-	this.timeStamp = src && src.timeStamp || jQuery.now();
+	this.timeStamp = src && src.timeStamp || Date.now();
 
 	// Mark it as fixed
 	this[ jQuery.expando ] = true;
@@ -5621,14 +5598,13 @@ var
 
 	/* eslint-enable */
 
-	// Support: IE <=10 - 11, Edge 12 - 13
+	// Support: IE <=10 - 11, Edge 12 - 13 only
 	// In IE/Edge using regex groups here causes severe slowdowns.
 	// See https://connect.microsoft.com/IE/feedback/details/1736512/
 	rnoInnerhtml = /<script|<style|<link/i,
 
 	// checked="checked" or checked
 	rchecked = /checked\s*(?:[^=]|=\s*.checked.)/i,
-	rscriptTypeMasked = /^true\/(.*)/,
 	rcleanScript = /^\s*<!(?:\[CDATA\[|--)|(?:\]\]|--)>\s*$/g;
 
 // Prefer a tbody over its parent table for containing new rows
@@ -5636,7 +5612,7 @@ function manipulationTarget( elem, content ) {
 	if ( nodeName( elem, "table" ) &&
 		nodeName( content.nodeType !== 11 ? content : content.firstChild, "tr" ) ) {
 
-		return jQuery( ">tbody", elem )[ 0 ] || elem;
+		return jQuery( elem ).children( "tbody" )[ 0 ] || elem;
 	}
 
 	return elem;
@@ -5648,10 +5624,8 @@ function disableScript( elem ) {
 	return elem;
 }
 function restoreScript( elem ) {
-	var match = rscriptTypeMasked.exec( elem.type );
-
-	if ( match ) {
-		elem.type = match[ 1 ];
+	if ( ( elem.type || "" ).slice( 0, 5 ) === "true/" ) {
+		elem.type = elem.type.slice( 5 );
 	} else {
 		elem.removeAttribute( "type" );
 	}
@@ -5717,15 +5691,15 @@ function domManip( collection, args, callback, ignored ) {
 		l = collection.length,
 		iNoClone = l - 1,
 		value = args[ 0 ],
-		isFunction = jQuery.isFunction( value );
+		valueIsFunction = isFunction( value );
 
 	// We can't cloneNode fragments that contain checked, in WebKit
-	if ( isFunction ||
+	if ( valueIsFunction ||
 			( l > 1 && typeof value === "string" &&
 				!support.checkClone && rchecked.test( value ) ) ) {
 		return collection.each( function( index ) {
 			var self = collection.eq( index );
-			if ( isFunction ) {
+			if ( valueIsFunction ) {
 				args[ 0 ] = value.call( this, index, self.html() );
 			}
 			domManip( self, args, callback, ignored );
@@ -5779,14 +5753,14 @@ function domManip( collection, args, callback, ignored ) {
 						!dataPriv.access( node, "globalEval" ) &&
 						jQuery.contains( doc, node ) ) {
 
-						if ( node.src ) {
+						if ( node.src && ( node.type || "" ).toLowerCase()  !== "module" ) {
 
 							// Optional AJAX dependency, but won't run scripts if not present
 							if ( jQuery._evalUrl ) {
 								jQuery._evalUrl( node.src );
 							}
 						} else {
-							DOMEval( node.textContent.replace( rcleanScript, "" ), doc );
+							DOMEval( node.textContent.replace( rcleanScript, "" ), doc, node );
 						}
 					}
 				}
@@ -6066,8 +6040,6 @@ jQuery.each( {
 		return this.pushStack( ret );
 	};
 } );
-var rmargin = ( /^margin/ );
-
 var rnumnonpx = new RegExp( "^(" + pnum + ")(?!px)[a-z%]+$", "i" );
 
 var getStyles = function( elem ) {
@@ -6084,6 +6056,8 @@ var getStyles = function( elem ) {
 		return view.getComputedStyle( elem );
 	};
 
+var rboxStyle = new RegExp( cssExpand.join( "|" ), "i" );
+
 
 
 ( function() {
@@ -6097,25 +6071,33 @@ var getStyles = function( elem ) {
 			return;
 		}
 
+		container.style.cssText = "position:absolute;left:-11111px;width:60px;" +
+			"margin-top:1px;padding:0;border:0";
 		div.style.cssText =
-			"box-sizing:border-box;" +
-			"position:relative;display:block;" +
+			"position:relative;display:block;box-sizing:border-box;overflow:scroll;" +
 			"margin:auto;border:1px;padding:1px;" +
-			"top:1%;width:50%";
-		div.innerHTML = "";
-		documentElement.appendChild( container );
+			"width:60%;top:1%";
+		documentElement.appendChild( container ).appendChild( div );
 
 		var divStyle = window.getComputedStyle( div );
 		pixelPositionVal = divStyle.top !== "1%";
 
 		// Support: Android 4.0 - 4.3 only, Firefox <=3 - 44
-		reliableMarginLeftVal = divStyle.marginLeft === "2px";
-		boxSizingReliableVal = divStyle.width === "4px";
+		reliableMarginLeftVal = roundPixelMeasures( divStyle.marginLeft ) === 12;
 
-		// Support: Android 4.0 - 4.3 only
+		// Support: Android 4.0 - 4.3 only, Safari <=9.1 - 10.1, iOS <=7.0 - 9.3
 		// Some styles come back with percentage values, even though they shouldn't
-		div.style.marginRight = "50%";
-		pixelMarginRightVal = divStyle.marginRight === "4px";
+		div.style.right = "60%";
+		pixelBoxStylesVal = roundPixelMeasures( divStyle.right ) === 36;
+
+		// Support: IE 9 - 11 only
+		// Detect misreporting of content dimensions for box-sizing:border-box elements
+		boxSizingReliableVal = roundPixelMeasures( divStyle.width ) === 36;
+
+		// Support: IE 9 only
+		// Detect overflow:scroll screwiness (gh-3699)
+		div.style.position = "absolute";
+		scrollboxSizeVal = div.offsetWidth === 36 || "absolute";
 
 		documentElement.removeChild( container );
 
@@ -6124,7 +6106,12 @@ var getStyles = function( elem ) {
 		div = null;
 	}
 
-	var pixelPositionVal, boxSizingReliableVal, pixelMarginRightVal, reliableMarginLeftVal,
+	function roundPixelMeasures( measure ) {
+		return Math.round( parseFloat( measure ) );
+	}
+
+	var pixelPositionVal, boxSizingReliableVal, scrollboxSizeVal, pixelBoxStylesVal,
+		reliableMarginLeftVal,
 		container = document.createElement( "div" ),
 		div = document.createElement( "div" );
 
@@ -6139,26 +6126,26 @@ var getStyles = function( elem ) {
 	div.cloneNode( true ).style.backgroundClip = "";
 	support.clearCloneStyle = div.style.backgroundClip === "content-box";
 
-	container.style.cssText = "border:0;width:8px;height:0;top:0;left:-9999px;" +
-		"padding:0;margin-top:1px;position:absolute";
-	container.appendChild( div );
-
 	jQuery.extend( support, {
-		pixelPosition: function() {
-			computeStyleTests();
-			return pixelPositionVal;
-		},
 		boxSizingReliable: function() {
 			computeStyleTests();
 			return boxSizingReliableVal;
 		},
-		pixelMarginRight: function() {
+		pixelBoxStyles: function() {
 			computeStyleTests();
-			return pixelMarginRightVal;
+			return pixelBoxStylesVal;
+		},
+		pixelPosition: function() {
+			computeStyleTests();
+			return pixelPositionVal;
 		},
 		reliableMarginLeft: function() {
 			computeStyleTests();
 			return reliableMarginLeftVal;
+		},
+		scrollboxSize: function() {
+			computeStyleTests();
+			return scrollboxSizeVal;
 		}
 	} );
 } )();
@@ -6190,7 +6177,7 @@ function curCSS( elem, name, computed ) {
 		// but width seems to be reliably pixels.
 		// This is against the CSSOM draft spec:
 		// https://drafts.csswg.org/cssom/#resolved-values
-		if ( !support.pixelMarginRight() && rnumnonpx.test( ret ) && rmargin.test( name ) ) {
+		if ( !support.pixelBoxStyles() && rnumnonpx.test( ret ) && rboxStyle.test( name ) ) {
 
 			// Remember the original values
 			width = style.width;
@@ -6295,87 +6282,120 @@ function setPositiveNumber( elem, value, subtract ) {
 		value;
 }
 
-function augmentWidthOrHeight( elem, name, extra, isBorderBox, styles ) {
-	var i,
-		val = 0;
+function boxModelAdjustment( elem, dimension, box, isBorderBox, styles, computedVal ) {
+	var i = dimension === "width" ? 1 : 0,
+		extra = 0,
+		delta = 0;
 
-	// If we already have the right measurement, avoid augmentation
-	if ( extra === ( isBorderBox ? "border" : "content" ) ) {
-		i = 4;
-
-	// Otherwise initialize for horizontal or vertical properties
-	} else {
-		i = name === "width" ? 1 : 0;
+	// Adjustment may not be necessary
+	if ( box === ( isBorderBox ? "border" : "content" ) ) {
+		return 0;
 	}
 
 	for ( ; i < 4; i += 2 ) {
 
-		// Both box models exclude margin, so add it if we want it
-		if ( extra === "margin" ) {
-			val += jQuery.css( elem, extra + cssExpand[ i ], true, styles );
+		// Both box models exclude margin
+		if ( box === "margin" ) {
+			delta += jQuery.css( elem, box + cssExpand[ i ], true, styles );
 		}
 
-		if ( isBorderBox ) {
+		// If we get here with a content-box, we're seeking "padding" or "border" or "margin"
+		if ( !isBorderBox ) {
 
-			// border-box includes padding, so remove it if we want content
-			if ( extra === "content" ) {
-				val -= jQuery.css( elem, "padding" + cssExpand[ i ], true, styles );
+			// Add padding
+			delta += jQuery.css( elem, "padding" + cssExpand[ i ], true, styles );
+
+			// For "border" or "margin", add border
+			if ( box !== "padding" ) {
+				delta += jQuery.css( elem, "border" + cssExpand[ i ] + "Width", true, styles );
+
+			// But still keep track of it otherwise
+			} else {
+				extra += jQuery.css( elem, "border" + cssExpand[ i ] + "Width", true, styles );
 			}
 
-			// At this point, extra isn't border nor margin, so remove border
-			if ( extra !== "margin" ) {
-				val -= jQuery.css( elem, "border" + cssExpand[ i ] + "Width", true, styles );
-			}
+		// If we get here with a border-box (content + padding + border), we're seeking "content" or
+		// "padding" or "margin"
 		} else {
 
-			// At this point, extra isn't content, so add padding
-			val += jQuery.css( elem, "padding" + cssExpand[ i ], true, styles );
+			// For "content", subtract padding
+			if ( box === "content" ) {
+				delta -= jQuery.css( elem, "padding" + cssExpand[ i ], true, styles );
+			}
 
-			// At this point, extra isn't content nor padding, so add border
-			if ( extra !== "padding" ) {
-				val += jQuery.css( elem, "border" + cssExpand[ i ] + "Width", true, styles );
+			// For "content" or "padding", subtract border
+			if ( box !== "margin" ) {
+				delta -= jQuery.css( elem, "border" + cssExpand[ i ] + "Width", true, styles );
 			}
 		}
 	}
 
-	return val;
+	// Account for positive content-box scroll gutter when requested by providing computedVal
+	if ( !isBorderBox && computedVal >= 0 ) {
+
+		// offsetWidth/offsetHeight is a rounded sum of content, padding, scroll gutter, and border
+		// Assuming integer scroll gutter, subtract the rest and round down
+		delta += Math.max( 0, Math.ceil(
+			elem[ "offset" + dimension[ 0 ].toUpperCase() + dimension.slice( 1 ) ] -
+			computedVal -
+			delta -
+			extra -
+			0.5
+		) );
+	}
+
+	return delta;
 }
 
-function getWidthOrHeight( elem, name, extra ) {
+function getWidthOrHeight( elem, dimension, extra ) {
 
 	// Start with computed style
-	var valueIsBorderBox,
-		styles = getStyles( elem ),
-		val = curCSS( elem, name, styles ),
-		isBorderBox = jQuery.css( elem, "boxSizing", false, styles ) === "border-box";
+	var styles = getStyles( elem ),
+		val = curCSS( elem, dimension, styles ),
+		isBorderBox = jQuery.css( elem, "boxSizing", false, styles ) === "border-box",
+		valueIsBorderBox = isBorderBox;
 
-	// Computed unit is not pixels. Stop here and return.
+	// Support: Firefox <=54
+	// Return a confounding non-pixel value or feign ignorance, as appropriate.
 	if ( rnumnonpx.test( val ) ) {
-		return val;
+		if ( !extra ) {
+			return val;
+		}
+		val = "auto";
 	}
 
 	// Check for style in case a browser which returns unreliable values
 	// for getComputedStyle silently falls back to the reliable elem.style
-	valueIsBorderBox = isBorderBox &&
-		( support.boxSizingReliable() || val === elem.style[ name ] );
+	valueIsBorderBox = valueIsBorderBox &&
+		( support.boxSizingReliable() || val === elem.style[ dimension ] );
 
-	// Fall back to offsetWidth/Height when value is "auto"
+	// Fall back to offsetWidth/offsetHeight when value is "auto"
 	// This happens for inline elements with no explicit setting (gh-3571)
-	if ( val === "auto" ) {
-		val = elem[ "offset" + name[ 0 ].toUpperCase() + name.slice( 1 ) ];
+	// Support: Android <=4.1 - 4.3 only
+	// Also use offsetWidth/offsetHeight for misreported inline dimensions (gh-3602)
+	if ( val === "auto" ||
+		!parseFloat( val ) && jQuery.css( elem, "display", false, styles ) === "inline" ) {
+
+		val = elem[ "offset" + dimension[ 0 ].toUpperCase() + dimension.slice( 1 ) ];
+
+		// offsetWidth/offsetHeight provide border-box values
+		valueIsBorderBox = true;
 	}
 
-	// Normalize "", auto, and prepare for extra
+	// Normalize "" and auto
 	val = parseFloat( val ) || 0;
 
-	// Use the active box-sizing model to add/subtract irrelevant styles
+	// Adjust for the element's box model
 	return ( val +
-		augmentWidthOrHeight(
+		boxModelAdjustment(
 			elem,
-			name,
+			dimension,
 			extra || ( isBorderBox ? "border" : "content" ),
 			valueIsBorderBox,
-			styles
+			styles,
+
+			// Provide the current computed size to request scroll gutter calculation (gh-3589)
+			val
 		)
 	) + "px";
 }
@@ -6416,9 +6436,7 @@ jQuery.extend( {
 
 	// Add in properties whose names you wish to fix before
 	// setting or getting the value
-	cssProps: {
-		"float": "cssFloat"
-	},
+	cssProps: {},
 
 	// Get and set the style property on a DOM Node
 	style: function( elem, name, value, extra ) {
@@ -6430,7 +6448,7 @@ jQuery.extend( {
 
 		// Make sure that we're working with the right name
 		var ret, type, hooks,
-			origName = jQuery.camelCase( name ),
+			origName = camelCase( name ),
 			isCustomProp = rcustomProp.test( name ),
 			style = elem.style;
 
@@ -6498,7 +6516,7 @@ jQuery.extend( {
 
 	css: function( elem, name, extra, styles ) {
 		var val, num, hooks,
-			origName = jQuery.camelCase( name ),
+			origName = camelCase( name ),
 			isCustomProp = rcustomProp.test( name );
 
 		// Make sure that we're working with the right name. We don't
@@ -6536,8 +6554,8 @@ jQuery.extend( {
 	}
 } );
 
-jQuery.each( [ "height", "width" ], function( i, name ) {
-	jQuery.cssHooks[ name ] = {
+jQuery.each( [ "height", "width" ], function( i, dimension ) {
+	jQuery.cssHooks[ dimension ] = {
 		get: function( elem, computed, extra ) {
 			if ( computed ) {
 
@@ -6553,29 +6571,41 @@ jQuery.each( [ "height", "width" ], function( i, name ) {
 					// in IE throws an error.
 					( !elem.getClientRects().length || !elem.getBoundingClientRect().width ) ?
 						swap( elem, cssShow, function() {
-							return getWidthOrHeight( elem, name, extra );
+							return getWidthOrHeight( elem, dimension, extra );
 						} ) :
-						getWidthOrHeight( elem, name, extra );
+						getWidthOrHeight( elem, dimension, extra );
 			}
 		},
 
 		set: function( elem, value, extra ) {
 			var matches,
-				styles = extra && getStyles( elem ),
-				subtract = extra && augmentWidthOrHeight(
+				styles = getStyles( elem ),
+				isBorderBox = jQuery.css( elem, "boxSizing", false, styles ) === "border-box",
+				subtract = extra && boxModelAdjustment(
 					elem,
-					name,
+					dimension,
 					extra,
-					jQuery.css( elem, "boxSizing", false, styles ) === "border-box",
+					isBorderBox,
 					styles
 				);
+
+			// Account for unreliable border-box dimensions by comparing offset* to computed and
+			// faking a content-box to get border and padding (gh-3699)
+			if ( isBorderBox && support.scrollboxSize() === styles.position ) {
+				subtract -= Math.ceil(
+					elem[ "offset" + dimension[ 0 ].toUpperCase() + dimension.slice( 1 ) ] -
+					parseFloat( styles[ dimension ] ) -
+					boxModelAdjustment( elem, dimension, "border", false, styles ) -
+					0.5
+				);
+			}
 
 			// Convert to pixels if value adjustment is needed
 			if ( subtract && ( matches = rcssNum.exec( value ) ) &&
 				( matches[ 3 ] || "px" ) !== "px" ) {
 
-				elem.style[ name ] = value;
-				value = jQuery.css( elem, name );
+				elem.style[ dimension ] = value;
+				value = jQuery.css( elem, dimension );
 			}
 
 			return setPositiveNumber( elem, value, subtract );
@@ -6619,7 +6649,7 @@ jQuery.each( {
 		}
 	};
 
-	if ( !rmargin.test( prefix ) ) {
+	if ( prefix !== "margin" ) {
 		jQuery.cssHooks[ prefix + suffix ].set = setPositiveNumber;
 	}
 } );
@@ -6790,7 +6820,7 @@ function createFxNow() {
 	window.setTimeout( function() {
 		fxNow = undefined;
 	} );
-	return ( fxNow = jQuery.now() );
+	return ( fxNow = Date.now() );
 }
 
 // Generate parameters to create a standard animation
@@ -6894,9 +6924,10 @@ function defaultPrefilter( elem, props, opts ) {
 	// Restrict "overflow" and "display" styles during box animations
 	if ( isBox && elem.nodeType === 1 ) {
 
-		// Support: IE <=9 - 11, Edge 12 - 13
+		// Support: IE <=9 - 11, Edge 12 - 15
 		// Record all 3 overflow attributes because IE does not infer the shorthand
-		// from identically-valued overflowX and overflowY
+		// from identically-valued overflowX and overflowY and Edge just mirrors
+		// the overflowX value there.
 		opts.overflow = [ style.overflow, style.overflowX, style.overflowY ];
 
 		// Identify a display type, preferring old show/hide data over the CSS cascade
@@ -7004,7 +7035,7 @@ function propFilter( props, specialEasing ) {
 
 	// camelCase, specialEasing and expand cssHook pass
 	for ( index in props ) {
-		name = jQuery.camelCase( index );
+		name = camelCase( index );
 		easing = specialEasing[ name ];
 		value = props[ index ];
 		if ( Array.isArray( value ) ) {
@@ -7129,9 +7160,9 @@ function Animation( elem, properties, options ) {
 	for ( ; index < length; index++ ) {
 		result = Animation.prefilters[ index ].call( animation, elem, props, animation.opts );
 		if ( result ) {
-			if ( jQuery.isFunction( result.stop ) ) {
+			if ( isFunction( result.stop ) ) {
 				jQuery._queueHooks( animation.elem, animation.opts.queue ).stop =
-					jQuery.proxy( result.stop, result );
+					result.stop.bind( result );
 			}
 			return result;
 		}
@@ -7139,7 +7170,7 @@ function Animation( elem, properties, options ) {
 
 	jQuery.map( props, createTween, animation );
 
-	if ( jQuery.isFunction( animation.opts.start ) ) {
+	if ( isFunction( animation.opts.start ) ) {
 		animation.opts.start.call( elem, animation );
 	}
 
@@ -7172,7 +7203,7 @@ jQuery.Animation = jQuery.extend( Animation, {
 	},
 
 	tweener: function( props, callback ) {
-		if ( jQuery.isFunction( props ) ) {
+		if ( isFunction( props ) ) {
 			callback = props;
 			props = [ "*" ];
 		} else {
@@ -7204,9 +7235,9 @@ jQuery.Animation = jQuery.extend( Animation, {
 jQuery.speed = function( speed, easing, fn ) {
 	var opt = speed && typeof speed === "object" ? jQuery.extend( {}, speed ) : {
 		complete: fn || !fn && easing ||
-			jQuery.isFunction( speed ) && speed,
+			isFunction( speed ) && speed,
 		duration: speed,
-		easing: fn && easing || easing && !jQuery.isFunction( easing ) && easing
+		easing: fn && easing || easing && !isFunction( easing ) && easing
 	};
 
 	// Go to the end state if fx are off
@@ -7233,7 +7264,7 @@ jQuery.speed = function( speed, easing, fn ) {
 	opt.old = opt.complete;
 
 	opt.complete = function() {
-		if ( jQuery.isFunction( opt.old ) ) {
+		if ( isFunction( opt.old ) ) {
 			opt.old.call( this );
 		}
 
@@ -7397,7 +7428,7 @@ jQuery.fx.tick = function() {
 		i = 0,
 		timers = jQuery.timers;
 
-	fxNow = jQuery.now();
+	fxNow = Date.now();
 
 	for ( ; i < timers.length; i++ ) {
 		timer = timers[ i ];
@@ -7750,7 +7781,7 @@ jQuery.each( [
 
 
 	// Strip and collapse whitespace according to HTML spec
-	// https://html.spec.whatwg.org/multipage/infrastructure.html#strip-and-collapse-whitespace
+	// https://infra.spec.whatwg.org/#strip-and-collapse-ascii-whitespace
 	function stripAndCollapse( value ) {
 		var tokens = value.match( rnothtmlwhite ) || [];
 		return tokens.join( " " );
@@ -7761,20 +7792,30 @@ function getClass( elem ) {
 	return elem.getAttribute && elem.getAttribute( "class" ) || "";
 }
 
+function classesToArray( value ) {
+	if ( Array.isArray( value ) ) {
+		return value;
+	}
+	if ( typeof value === "string" ) {
+		return value.match( rnothtmlwhite ) || [];
+	}
+	return [];
+}
+
 jQuery.fn.extend( {
 	addClass: function( value ) {
 		var classes, elem, cur, curValue, clazz, j, finalValue,
 			i = 0;
 
-		if ( jQuery.isFunction( value ) ) {
+		if ( isFunction( value ) ) {
 			return this.each( function( j ) {
 				jQuery( this ).addClass( value.call( this, j, getClass( this ) ) );
 			} );
 		}
 
-		if ( typeof value === "string" && value ) {
-			classes = value.match( rnothtmlwhite ) || [];
+		classes = classesToArray( value );
 
+		if ( classes.length ) {
 			while ( ( elem = this[ i++ ] ) ) {
 				curValue = getClass( elem );
 				cur = elem.nodeType === 1 && ( " " + stripAndCollapse( curValue ) + " " );
@@ -7803,7 +7844,7 @@ jQuery.fn.extend( {
 		var classes, elem, cur, curValue, clazz, j, finalValue,
 			i = 0;
 
-		if ( jQuery.isFunction( value ) ) {
+		if ( isFunction( value ) ) {
 			return this.each( function( j ) {
 				jQuery( this ).removeClass( value.call( this, j, getClass( this ) ) );
 			} );
@@ -7813,9 +7854,9 @@ jQuery.fn.extend( {
 			return this.attr( "class", "" );
 		}
 
-		if ( typeof value === "string" && value ) {
-			classes = value.match( rnothtmlwhite ) || [];
+		classes = classesToArray( value );
 
+		if ( classes.length ) {
 			while ( ( elem = this[ i++ ] ) ) {
 				curValue = getClass( elem );
 
@@ -7845,13 +7886,14 @@ jQuery.fn.extend( {
 	},
 
 	toggleClass: function( value, stateVal ) {
-		var type = typeof value;
+		var type = typeof value,
+			isValidValue = type === "string" || Array.isArray( value );
 
-		if ( typeof stateVal === "boolean" && type === "string" ) {
+		if ( typeof stateVal === "boolean" && isValidValue ) {
 			return stateVal ? this.addClass( value ) : this.removeClass( value );
 		}
 
-		if ( jQuery.isFunction( value ) ) {
+		if ( isFunction( value ) ) {
 			return this.each( function( i ) {
 				jQuery( this ).toggleClass(
 					value.call( this, i, getClass( this ), stateVal ),
@@ -7863,12 +7905,12 @@ jQuery.fn.extend( {
 		return this.each( function() {
 			var className, i, self, classNames;
 
-			if ( type === "string" ) {
+			if ( isValidValue ) {
 
 				// Toggle individual class names
 				i = 0;
 				self = jQuery( this );
-				classNames = value.match( rnothtmlwhite ) || [];
+				classNames = classesToArray( value );
 
 				while ( ( className = classNames[ i++ ] ) ) {
 
@@ -7927,7 +7969,7 @@ var rreturn = /\r/g;
 
 jQuery.fn.extend( {
 	val: function( value ) {
-		var hooks, ret, isFunction,
+		var hooks, ret, valueIsFunction,
 			elem = this[ 0 ];
 
 		if ( !arguments.length ) {
@@ -7956,7 +7998,7 @@ jQuery.fn.extend( {
 			return;
 		}
 
-		isFunction = jQuery.isFunction( value );
+		valueIsFunction = isFunction( value );
 
 		return this.each( function( i ) {
 			var val;
@@ -7965,7 +8007,7 @@ jQuery.fn.extend( {
 				return;
 			}
 
-			if ( isFunction ) {
+			if ( valueIsFunction ) {
 				val = value.call( this, i, jQuery( this ).val() );
 			} else {
 				val = value;
@@ -8107,18 +8149,24 @@ jQuery.each( [ "radio", "checkbox" ], function() {
 // Return jQuery for attributes-only inclusion
 
 
-var rfocusMorph = /^(?:focusinfocus|focusoutblur)$/;
+support.focusin = "onfocusin" in window;
+
+
+var rfocusMorph = /^(?:focusinfocus|focusoutblur)$/,
+	stopPropagationCallback = function( e ) {
+		e.stopPropagation();
+	};
 
 jQuery.extend( jQuery.event, {
 
 	trigger: function( event, data, elem, onlyHandlers ) {
 
-		var i, cur, tmp, bubbleType, ontype, handle, special,
+		var i, cur, tmp, bubbleType, ontype, handle, special, lastElement,
 			eventPath = [ elem || document ],
 			type = hasOwn.call( event, "type" ) ? event.type : event,
 			namespaces = hasOwn.call( event, "namespace" ) ? event.namespace.split( "." ) : [];
 
-		cur = tmp = elem = elem || document;
+		cur = lastElement = tmp = elem = elem || document;
 
 		// Don't do events on text and comment nodes
 		if ( elem.nodeType === 3 || elem.nodeType === 8 ) {
@@ -8170,7 +8218,7 @@ jQuery.extend( jQuery.event, {
 
 		// Determine event propagation path in advance, per W3C events spec (#9951)
 		// Bubble up to document, then to window; watch for a global ownerDocument var (#9724)
-		if ( !onlyHandlers && !special.noBubble && !jQuery.isWindow( elem ) ) {
+		if ( !onlyHandlers && !special.noBubble && !isWindow( elem ) ) {
 
 			bubbleType = special.delegateType || type;
 			if ( !rfocusMorph.test( bubbleType + type ) ) {
@@ -8190,7 +8238,7 @@ jQuery.extend( jQuery.event, {
 		// Fire handlers on the event path
 		i = 0;
 		while ( ( cur = eventPath[ i++ ] ) && !event.isPropagationStopped() ) {
-
+			lastElement = cur;
 			event.type = i > 1 ?
 				bubbleType :
 				special.bindType || type;
@@ -8222,7 +8270,7 @@ jQuery.extend( jQuery.event, {
 
 				// Call a native DOM method on the target with the same name as the event.
 				// Don't do default actions on window, that's where global variables be (#6170)
-				if ( ontype && jQuery.isFunction( elem[ type ] ) && !jQuery.isWindow( elem ) ) {
+				if ( ontype && isFunction( elem[ type ] ) && !isWindow( elem ) ) {
 
 					// Don't re-trigger an onFOO event when we call its FOO() method
 					tmp = elem[ ontype ];
@@ -8233,7 +8281,17 @@ jQuery.extend( jQuery.event, {
 
 					// Prevent re-triggering of the same event, since we already bubbled it above
 					jQuery.event.triggered = type;
+
+					if ( event.isPropagationStopped() ) {
+						lastElement.addEventListener( type, stopPropagationCallback );
+					}
+
 					elem[ type ]();
+
+					if ( event.isPropagationStopped() ) {
+						lastElement.removeEventListener( type, stopPropagationCallback );
+					}
+
 					jQuery.event.triggered = undefined;
 
 					if ( tmp ) {
@@ -8279,31 +8337,6 @@ jQuery.fn.extend( {
 } );
 
 
-jQuery.each( ( "blur focus focusin focusout resize scroll click dblclick " +
-	"mousedown mouseup mousemove mouseover mouseout mouseenter mouseleave " +
-	"change select submit keydown keypress keyup contextmenu" ).split( " " ),
-	function( i, name ) {
-
-	// Handle event binding
-	jQuery.fn[ name ] = function( data, fn ) {
-		return arguments.length > 0 ?
-			this.on( name, null, data, fn ) :
-			this.trigger( name );
-	};
-} );
-
-jQuery.fn.extend( {
-	hover: function( fnOver, fnOut ) {
-		return this.mouseenter( fnOver ).mouseleave( fnOut || fnOver );
-	}
-} );
-
-
-
-
-support.focusin = "onfocusin" in window;
-
-
 // Support: Firefox <=44
 // Firefox doesn't have focus(in | out) events
 // Related ticket - https://bugzilla.mozilla.org/show_bug.cgi?id=687787
@@ -8347,7 +8380,7 @@ if ( !support.focusin ) {
 }
 var location = window.location;
 
-var nonce = jQuery.now();
+var nonce = Date.now();
 
 var rquery = ( /\?/ );
 
@@ -8405,7 +8438,7 @@ function buildParams( prefix, obj, traditional, add ) {
 			}
 		} );
 
-	} else if ( !traditional && jQuery.type( obj ) === "object" ) {
+	} else if ( !traditional && toType( obj ) === "object" ) {
 
 		// Serialize object item.
 		for ( name in obj ) {
@@ -8427,7 +8460,7 @@ jQuery.param = function( a, traditional ) {
 		add = function( key, valueOrFunction ) {
 
 			// If value is a function, invoke it and use its return value
-			var value = jQuery.isFunction( valueOrFunction ) ?
+			var value = isFunction( valueOrFunction ) ?
 				valueOrFunction() :
 				valueOrFunction;
 
@@ -8545,7 +8578,7 @@ function addToPrefiltersOrTransports( structure ) {
 			i = 0,
 			dataTypes = dataTypeExpression.toLowerCase().match( rnothtmlwhite ) || [];
 
-		if ( jQuery.isFunction( func ) ) {
+		if ( isFunction( func ) ) {
 
 			// For each dataType in the dataTypeExpression
 			while ( ( dataType = dataTypes[ i++ ] ) ) {
@@ -9017,7 +9050,7 @@ jQuery.extend( {
 		if ( s.crossDomain == null ) {
 			urlAnchor = document.createElement( "a" );
 
-			// Support: IE <=8 - 11, Edge 12 - 13
+			// Support: IE <=8 - 11, Edge 12 - 15
 			// IE throws exception on accessing the href property if url is malformed,
 			// e.g. http://example.com:80x/
 			try {
@@ -9075,8 +9108,8 @@ jQuery.extend( {
 			// Remember the hash so we can put it back
 			uncached = s.url.slice( cacheURL.length );
 
-			// If data is available, append data to url
-			if ( s.data ) {
+			// If data is available and should be processed, append data to url
+			if ( s.data && ( s.processData || typeof s.data === "string" ) ) {
 				cacheURL += ( rquery.test( cacheURL ) ? "&" : "?" ) + s.data;
 
 				// #9682: remove data so that it's not used in an eventual retry
@@ -9313,7 +9346,7 @@ jQuery.each( [ "get", "post" ], function( i, method ) {
 	jQuery[ method ] = function( url, data, callback, type ) {
 
 		// Shift arguments if data argument was omitted
-		if ( jQuery.isFunction( data ) ) {
+		if ( isFunction( data ) ) {
 			type = type || callback;
 			callback = data;
 			data = undefined;
@@ -9351,7 +9384,7 @@ jQuery.fn.extend( {
 		var wrap;
 
 		if ( this[ 0 ] ) {
-			if ( jQuery.isFunction( html ) ) {
+			if ( isFunction( html ) ) {
 				html = html.call( this[ 0 ] );
 			}
 
@@ -9377,7 +9410,7 @@ jQuery.fn.extend( {
 	},
 
 	wrapInner: function( html ) {
-		if ( jQuery.isFunction( html ) ) {
+		if ( isFunction( html ) ) {
 			return this.each( function( i ) {
 				jQuery( this ).wrapInner( html.call( this, i ) );
 			} );
@@ -9397,10 +9430,10 @@ jQuery.fn.extend( {
 	},
 
 	wrap: function( html ) {
-		var isFunction = jQuery.isFunction( html );
+		var htmlIsFunction = isFunction( html );
 
 		return this.each( function( i ) {
-			jQuery( this ).wrapAll( isFunction ? html.call( this, i ) : html );
+			jQuery( this ).wrapAll( htmlIsFunction ? html.call( this, i ) : html );
 		} );
 	},
 
@@ -9492,7 +9525,8 @@ jQuery.ajaxTransport( function( options ) {
 					return function() {
 						if ( callback ) {
 							callback = errorCallback = xhr.onload =
-								xhr.onerror = xhr.onabort = xhr.onreadystatechange = null;
+								xhr.onerror = xhr.onabort = xhr.ontimeout =
+									xhr.onreadystatechange = null;
 
 							if ( type === "abort" ) {
 								xhr.abort();
@@ -9532,7 +9566,7 @@ jQuery.ajaxTransport( function( options ) {
 
 				// Listen to events
 				xhr.onload = callback();
-				errorCallback = xhr.onerror = callback( "error" );
+				errorCallback = xhr.onerror = xhr.ontimeout = callback( "error" );
 
 				// Support: IE 9 only
 				// Use onreadystatechange to replace onabort
@@ -9686,7 +9720,7 @@ jQuery.ajaxPrefilter( "json jsonp", function( s, originalSettings, jqXHR ) {
 	if ( jsonProp || s.dataTypes[ 0 ] === "jsonp" ) {
 
 		// Get callback name, remembering preexisting value associated with it
-		callbackName = s.jsonpCallback = jQuery.isFunction( s.jsonpCallback ) ?
+		callbackName = s.jsonpCallback = isFunction( s.jsonpCallback ) ?
 			s.jsonpCallback() :
 			s.jsonpCallback;
 
@@ -9737,7 +9771,7 @@ jQuery.ajaxPrefilter( "json jsonp", function( s, originalSettings, jqXHR ) {
 			}
 
 			// Call if it was a function and we have a response
-			if ( responseContainer && jQuery.isFunction( overwritten ) ) {
+			if ( responseContainer && isFunction( overwritten ) ) {
 				overwritten( responseContainer[ 0 ] );
 			}
 
@@ -9829,7 +9863,7 @@ jQuery.fn.load = function( url, params, callback ) {
 	}
 
 	// If it's a function
-	if ( jQuery.isFunction( params ) ) {
+	if ( isFunction( params ) ) {
 
 		// We assume that it's the callback
 		callback = params;
@@ -9937,7 +9971,7 @@ jQuery.offset = {
 			curLeft = parseFloat( curCSSLeft ) || 0;
 		}
 
-		if ( jQuery.isFunction( options ) ) {
+		if ( isFunction( options ) ) {
 
 			// Use jQuery.extend here to allow modification of coordinates argument (gh-1848)
 			options = options.call( elem, i, jQuery.extend( {}, curOffset ) );
@@ -9960,6 +9994,8 @@ jQuery.offset = {
 };
 
 jQuery.fn.extend( {
+
+	// offset() relates an element's border box to the document origin
 	offset: function( options ) {
 
 		// Preserve chaining for setter
@@ -9971,7 +10007,7 @@ jQuery.fn.extend( {
 				} );
 		}
 
-		var doc, docElem, rect, win,
+		var rect, win,
 			elem = this[ 0 ];
 
 		if ( !elem ) {
@@ -9986,50 +10022,52 @@ jQuery.fn.extend( {
 			return { top: 0, left: 0 };
 		}
 
+		// Get document-relative position by adding viewport scroll to viewport-relative gBCR
 		rect = elem.getBoundingClientRect();
-
-		doc = elem.ownerDocument;
-		docElem = doc.documentElement;
-		win = doc.defaultView;
-
+		win = elem.ownerDocument.defaultView;
 		return {
-			top: rect.top + win.pageYOffset - docElem.clientTop,
-			left: rect.left + win.pageXOffset - docElem.clientLeft
+			top: rect.top + win.pageYOffset,
+			left: rect.left + win.pageXOffset
 		};
 	},
 
+	// position() relates an element's margin box to its offset parent's padding box
+	// This corresponds to the behavior of CSS absolute positioning
 	position: function() {
 		if ( !this[ 0 ] ) {
 			return;
 		}
 
-		var offsetParent, offset,
+		var offsetParent, offset, doc,
 			elem = this[ 0 ],
 			parentOffset = { top: 0, left: 0 };
 
-		// Fixed elements are offset from window (parentOffset = {top:0, left: 0},
-		// because it is its only offset parent
+		// position:fixed elements are offset from the viewport, which itself always has zero offset
 		if ( jQuery.css( elem, "position" ) === "fixed" ) {
 
-			// Assume getBoundingClientRect is there when computed position is fixed
+			// Assume position:fixed implies availability of getBoundingClientRect
 			offset = elem.getBoundingClientRect();
 
 		} else {
-
-			// Get *real* offsetParent
-			offsetParent = this.offsetParent();
-
-			// Get correct offsets
 			offset = this.offset();
-			if ( !nodeName( offsetParent[ 0 ], "html" ) ) {
-				parentOffset = offsetParent.offset();
-			}
 
-			// Add offsetParent borders
-			parentOffset = {
-				top: parentOffset.top + jQuery.css( offsetParent[ 0 ], "borderTopWidth", true ),
-				left: parentOffset.left + jQuery.css( offsetParent[ 0 ], "borderLeftWidth", true )
-			};
+			// Account for the *real* offset parent, which can be the document or its root element
+			// when a statically positioned element is identified
+			doc = elem.ownerDocument;
+			offsetParent = elem.offsetParent || doc.documentElement;
+			while ( offsetParent &&
+				( offsetParent === doc.body || offsetParent === doc.documentElement ) &&
+				jQuery.css( offsetParent, "position" ) === "static" ) {
+
+				offsetParent = offsetParent.parentNode;
+			}
+			if ( offsetParent && offsetParent !== elem && offsetParent.nodeType === 1 ) {
+
+				// Incorporate borders into its offset, since they are outside its content origin
+				parentOffset = jQuery( offsetParent ).offset();
+				parentOffset.top += jQuery.css( offsetParent, "borderTopWidth", true );
+				parentOffset.left += jQuery.css( offsetParent, "borderLeftWidth", true );
+			}
 		}
 
 		// Subtract parent offsets and element margins
@@ -10071,7 +10109,7 @@ jQuery.each( { scrollLeft: "pageXOffset", scrollTop: "pageYOffset" }, function( 
 
 			// Coalesce documents and windows
 			var win;
-			if ( jQuery.isWindow( elem ) ) {
+			if ( isWindow( elem ) ) {
 				win = elem;
 			} else if ( elem.nodeType === 9 ) {
 				win = elem.defaultView;
@@ -10129,7 +10167,7 @@ jQuery.each( { Height: "height", Width: "width" }, function( name, type ) {
 			return access( this, function( elem, type, value ) {
 				var doc;
 
-				if ( jQuery.isWindow( elem ) ) {
+				if ( isWindow( elem ) ) {
 
 					// $( window ).outerWidth/Height return w/h including scrollbars (gh-1729)
 					return funcName.indexOf( "outer" ) === 0 ?
@@ -10163,6 +10201,28 @@ jQuery.each( { Height: "height", Width: "width" }, function( name, type ) {
 } );
 
 
+jQuery.each( ( "blur focus focusin focusout resize scroll click dblclick " +
+	"mousedown mouseup mousemove mouseover mouseout mouseenter mouseleave " +
+	"change select submit keydown keypress keyup contextmenu" ).split( " " ),
+	function( i, name ) {
+
+	// Handle event binding
+	jQuery.fn[ name ] = function( data, fn ) {
+		return arguments.length > 0 ?
+			this.on( name, null, data, fn ) :
+			this.trigger( name );
+	};
+} );
+
+jQuery.fn.extend( {
+	hover: function( fnOver, fnOut ) {
+		return this.mouseenter( fnOver ).mouseleave( fnOut || fnOver );
+	}
+} );
+
+
+
+
 jQuery.fn.extend( {
 
 	bind: function( types, data, fn ) {
@@ -10184,6 +10244,37 @@ jQuery.fn.extend( {
 	}
 } );
 
+// Bind a function to a context, optionally partially applying any
+// arguments.
+// jQuery.proxy is deprecated to promote standards (specifically Function#bind)
+// However, it is not slated for removal any time soon
+jQuery.proxy = function( fn, context ) {
+	var tmp, args, proxy;
+
+	if ( typeof context === "string" ) {
+		tmp = fn[ context ];
+		context = fn;
+		fn = tmp;
+	}
+
+	// Quick check to determine if target is callable, in the spec
+	// this throws a TypeError, but we will just return undefined.
+	if ( !isFunction( fn ) ) {
+		return undefined;
+	}
+
+	// Simulated bind
+	args = slice.call( arguments, 2 );
+	proxy = function() {
+		return fn.apply( context || this, args.concat( slice.call( arguments ) ) );
+	};
+
+	// Set the guid of unique handler to the same of original handler, so it can be removed
+	proxy.guid = fn.guid = fn.guid || jQuery.guid++;
+
+	return proxy;
+};
+
 jQuery.holdReady = function( hold ) {
 	if ( hold ) {
 		jQuery.readyWait++;
@@ -10194,6 +10285,26 @@ jQuery.holdReady = function( hold ) {
 jQuery.isArray = Array.isArray;
 jQuery.parseJSON = JSON.parse;
 jQuery.nodeName = nodeName;
+jQuery.isFunction = isFunction;
+jQuery.isWindow = isWindow;
+jQuery.camelCase = camelCase;
+jQuery.type = toType;
+
+jQuery.now = Date.now;
+
+jQuery.isNumeric = function( obj ) {
+
+	// As of jQuery 3.0, isNumeric is limited to
+	// strings and numbers (primitives or objects)
+	// that can be coerced to finite numbers (gh-2662)
+	var type = jQuery.type( obj );
+	return ( type === "number" || type === "string" ) &&
+
+		// parseFloat NaNs numeric-cast false positives ("")
+		// ...but misinterprets leading-number strings, particularly hex literals ("0x...")
+		// subtraction forces infinities to NaN
+		!isNaN( obj - parseFloat( obj ) );
+};
 
 
 
@@ -10334,7 +10445,7 @@ sco.run();
 });
 ___scope___.file("sco1221/main.scss", function(exports, require, module, __filename, __dirname){
 
-__fsbx_css("sco1221/main.scss", "/* Estilos de prueba. NO UTILIZAR en proyecto*/\n/* Common */\n/*Cross browser: reset vendor styles*/\nhtml, body, span, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre,\narticle, aside, details, dialog, figcaption, figure, footer, header, main, nav, section, summary, audio, canvas, video, mark, code, kbd, pre, samp,\na, abbr, acronym, address, code, del, dfn, em, strong, img, q, dl, dt, dd, ol, ul,\nli, fieldset, form, label, legend, table, caption, tbody, tfoot, thead,\ntr, th, td, div {\n  line-height: initial;\n  margin: 0;\n  padding: 0;\n  border: none;\n  font-weight: normal;\n  font-style: normal;\n  font-size: 100%;\n  font-family: inherit;\n  vertical-align: baseline;\n  text-decoration: none;\n  -ms-box-sizing: border-box;\n  -webkit-box-sizing: border-box;\n  -moz-box-sizing: border-box;\n  box-sizing: border-box;\n}\n\nhtml {\n  font-family: sans-serif;\n  /* 1 */\n  line-height: 1.15;\n  /* 2 */\n  -ms-text-size-adjust: 100%;\n  /* 3 */\n  -webkit-text-size-adjust: 100%;\n  /* 3 */\n}\n\ninput, button, select, textarea {\n  line-height: initial;\n  margin: 0;\n  padding: 0;\n  font-weight: normal;\n  font-style: normal;\n  font-size: 100%;\n  font-family: inherit;\n  vertical-align: baseline;\n  text-decoration: none;\n  -ms-box-sizing: border-box;\n  -webkit-box-sizing: border-box;\n  -moz-box-sizing: border-box;\n  box-sizing: border-box;\n}\n\nul, ol, dl {\n  list-style: none;\n}\n\ninput[type=\"text\"] {\n  -webkit-appearance: none;\n}\n\nbody input[type=\"search\"] {\n  box-sizing: border-box;\n}\n\ni {\n  font-style: normal;\n}\n\n/*html elements*/\narticle,\naside,\ndetails,\nfigcaption,\nfigure,\nfooter,\nheader,\nmain,\nmenu,\nnav,\nsection,\nsummary {\n  /* 1 */\n  display: block;\n}\n\n/*! extends from normalize.css v4.1.1 | MIT License | github.com/necolas/normalize.css */\n/**\r\n * 1. Change the default font family in all browsers (opinionated).\r\n * 2. Correct the line height in all browsers.\r\n * 3. Prevent adjustments of font size after orientation changes in IE and iOS.\r\n */\nhtml {\n  font-family: sans-serif;\n  /* 1 */\n  font-size: 100%;\n  line-height: 1.15;\n  /* 2 */\n  -ms-text-size-adjust: 100%;\n  /* 3 */\n  -webkit-text-size-adjust: 100%;\n  /* 3 */\n}\n\n/**\r\n * Remove the margin in all browsers (opinionated).\r\n */\nbody {\n  margin: 0;\n}\n\n/* HTML5 display definitions\r\n   ========================================================================== */\n/**\r\n * Add the correct display in IE 9-.\r\n * 1. Add the correct display in Edge, IE, and Firefox.\r\n * 2. Add the correct display in IE.\r\n */\narticle,\naside,\ndetails,\nfigcaption,\nfigure,\nfooter,\nheader,\nmain,\nmenu,\nnav,\nsection,\nsummary {\n  /* 1 */\n  display: block;\n}\n\n/**\r\n * Add the correct display in IE 9-.\r\n */\naudio,\ncanvas,\nprogress,\nvideo {\n  display: inline-block;\n}\n\n/**\r\n * Add the correct display in iOS 4-7.\r\n */\naudio:not([controls]) {\n  display: none;\n  height: 0;\n}\n\n/**\r\n * Add the correct vertical alignment in Chrome, Firefox, and Opera.\r\n */\nprogress {\n  vertical-align: baseline;\n}\n\n/**\r\n * Add the correct display in IE 10-.\r\n * 1. Add the correct display in IE.\r\n */\ntemplate,\n[hidden] {\n  display: none;\n}\n\n/* Links\r\n   ========================================================================== */\n/**\r\n * 1. Remove the gray background on active links in IE 10.\r\n * 2. Remove gaps in links underline in iOS 8+ and Safari 8+.\r\n */\na {\n  background-color: transparent;\n  /* 1 */\n  -webkit-text-decoration-skip: objects;\n  /* 2 */\n}\n\n/**\r\n * Remove the outline on focused links when they are also active or hovered\r\n * in all browsers (opinionated).\r\n */\na:active,\na:hover,\na:visited {\n  outline-width: 0;\n  color: inherit;\n}\n\n/* Text-level semantics\r\n   ========================================================================== */\n/**\r\n * 1. Remove the bottom border in Firefox 39-.\r\n * 2. Add the correct text decoration in Chrome, Edge, IE, Opera, and Safari.\r\n */\nabbr[title] {\n  border-bottom: none;\n  /* 1 */\n  text-decoration: underline;\n  /* 2 */\n  text-decoration: underline dotted;\n  /* 2 */\n}\n\n/**\r\n * Prevent the duplicate application of `bolder` by the next rule in Safari 6.\r\n */\nb,\nstrong {\n  font-weight: inherit;\n}\n\n/**\r\n * Add the correct font weight in Chrome, Edge, and Safari.\r\n */\nb,\nstrong {\n  font-weight: bold;\n}\n\n/**\r\n * Add the correct font style in Android 4.3-.\r\n */\ndfn {\n  font-style: italic;\n}\n\n/**\r\n * Add the correct background and color in IE 9-.\r\n */\nmark {\n  background-color: #ff0;\n  color: #000;\n}\n\n/**\r\n * Add the correct font size in all browsers.\r\n */\nsmall {\n  font-size: 80%;\n}\n\n/**\r\n * Prevent `sub` and `sup` elements from affecting the line height in\r\n * all browsers.\r\n */\nsub,\nsup {\n  font-size: 75%;\n  line-height: 0;\n  position: relative;\n  vertical-align: baseline;\n}\n\nsub {\n  bottom: -0.25em;\n}\n\nsup {\n  top: -0.5em;\n}\n\n/* Embedded content\r\n   ========================================================================== */\n/**\r\n * Remove the border on images inside links in IE 10-.\r\n */\nimg {\n  border-style: none;\n  max-width: 100%;\n}\n\n/**\r\n * Hide the overflow in IE.\r\n */\nsvg:not(:root) {\n  overflow: hidden;\n}\n\n/* Grouping content\r\n   ========================================================================== */\n/**\r\n * 1. Correct the inheritance and scaling of font size in all browsers.\r\n * 2. Correct the odd `em` font sizing in all browsers.\r\n */\ncode,\nkbd,\npre,\nsamp {\n  font-family: monospace, monospace;\n  /* 1 */\n  font-size: 1em;\n  /* 2 */\n}\n\n/**\r\n * 1. Add the correct box sizing in Firefox.\r\n * 2. Show the overflow in Edge and IE.\r\n */\nhr {\n  box-sizing: content-box;\n  /* 1 */\n  height: 0;\n  /* 1 */\n  overflow: visible;\n  /* 2 */\n}\n\n/* Forms\r\n   ========================================================================== */\n/**\r\n * 1. Change font properties to `inherit` in all browsers (opinionated).\r\n * 2. Remove the margin in Firefox and Safari.\r\n */\nbutton,\ninput,\noptgroup,\nselect,\ntextarea {\n  font: inherit;\n  /* 1 */\n  margin: 0;\n  /* 2 */\n}\n\n/**\r\n * Restore the font weight unset by the previous rule.\r\n */\noptgroup {\n  font-weight: bold;\n}\n\n/**\r\n * Show the overflow in IE.\r\n * 1. Show the overflow in Edge.\r\n */\nbutton,\ninput {\n  /* 1 */\n  overflow: visible;\n}\n\n/**\r\n * Remove the inheritance of text transform in Edge, Firefox, and IE.\r\n * 1. Remove the inheritance of text transform in Firefox.\r\n */\nbutton,\nselect {\n  /* 1 */\n  text-transform: none;\n}\n\n/**\r\n * 1. Prevent a WebKit bug where (2) destroys native `audio` and `video`\r\n *    controls in Android 4.\r\n * 2. Correct the inability to style clickable types in iOS and Safari.\r\n */\nbutton,\nhtml [type=\"button\"],\n[type=\"reset\"],\n[type=\"submit\"] {\n  -webkit-appearance: button;\n  /* 2 */\n}\n\n/**\r\n * Remove the inner border and padding in Firefox.\r\n */\nbutton::-moz-focus-inner,\n[type=\"button\"]::-moz-focus-inner,\n[type=\"reset\"]::-moz-focus-inner,\n[type=\"submit\"]::-moz-focus-inner {\n  border-style: none;\n  padding: 0;\n}\n\n/**\r\n * 1. Correct the text wrapping in Edge and IE.\r\n * 2. Correct the color inheritance from `fieldset` elements in IE.\r\n * 3. Remove the padding so developers are not caught out when they zero out\r\n *    `fieldset` elements in all browsers.\r\n */\nlegend {\n  box-sizing: border-box;\n  /* 1 */\n  color: inherit;\n  /* 2 */\n  display: table;\n  /* 1 */\n  max-width: 100%;\n  /* 1 */\n  padding: 0;\n  /* 3 */\n  white-space: normal;\n  /* 1 */\n}\n\n/**\r\n * Remove the default vertical scrollbar in IE.\r\n */\ntextarea {\n  overflow: auto;\n}\n\n/**\r\n * Correct the cursor style of increment and decrement buttons in Chrome.\r\n */\n[type=\"number\"]::-webkit-inner-spin-button,\n[type=\"number\"]::-webkit-outer-spin-button {\n  height: auto;\n}\n\n/**\r\n * 1. Correct the odd appearance in Chrome and Safari.\r\n * 2. Correct the outline style in Safari.\r\n */\n[type=\"search\"] {\n  -webkit-appearance: textfield;\n  /* 1 */\n  outline-offset: -2px;\n  /* 2 */\n}\n\n/**\r\n * Remove the inner padding and cancel buttons in Chrome and Safari on OS X.\r\n */\n[type=\"search\"]::-webkit-search-cancel-button,\n[type=\"search\"]::-webkit-search-decoration {\n  -webkit-appearance: none;\n}\n\n/**\r\n * Correct the text style of placeholders in Chrome, Edge, and Safari.\r\n */\n::-webkit-input-placeholder {\n  color: inherit;\n  opacity: 0.54;\n}\n\n/**\r\n * 1. Correct the inability to style clickable types in iOS and Safari.\r\n * 2. Change font properties to `inherit` in Safari.\r\n */\n::-webkit-file-upload-button {\n  -webkit-appearance: button;\n  /* 1 */\n  font: inherit;\n  /* 2 */\n}\n\n/* End common */\n/* Components */\nbody {\n  width: 80%;\n  margin: 0 auto;\n  padding: 1em;\n}\n\n/* _mod-viewer */\n.mod-viewer {\n  height: 95vh;\n  display: flex;\n  flex-direction: column;\n  opacity: 0.9;\n  overflow: hidden;\n}\n\n.mod-viewer [data-hz-pages],\n.mod-viewer [hz-pages] {\n  overflow: auto;\n}\n\n/* End _mod-viewer */\n/* _hz-navbar.theme-default */\n/* _hz-navbar.structure */\n.hz-navbar {\n  display: flex;\n  padding: 0.75em;\n  align-items: center;\n}\n\n.hz-navbar .hz-navbar__btn {\n  margin: 0;\n  padding: 0;\n  border: none;\n  cursor: pointer;\n  background: none;\n  outline: none;\n}\n\n.hz-navbar .hz-navbar__progress {\n  width: 33.3%;\n  display: flex;\n  align-items: center;\n}\n\n.hz-navbar .hz-navbar__progress-mask {\n  position: absolute;\n  top: 0;\n  right: 0;\n  bottom: 0;\n  left: 0;\n  z-index: 1;\n}\n\n.hz-navbar .hz-navbar__progress-bar {\n  height: 1.125em;\n  width: 75%;\n  position: relative;\n}\n\n.hz-navbar .hz-navbar__progress-value {\n  height: 100%;\n  transform: scaleX(0);\n  transform-origin: left;\n}\n\n.hz-navbar .hz-navbar__progress-percentage {\n  margin-left: 0.375em;\n}\n\n.hz-navbar .hz-navbar__actions {\n  display: flex;\n  width: 33.3%;\n  justify-content: center;\n}\n\n.hz-navbar .hz-navbar__actions .hz-navbar__btn {\n  margin: 0 0.375em;\n}\n\n.hz-navbar .hz-navbar__pager {\n  display: flex;\n  align-items: center;\n  width: 33.3%;\n  justify-content: flex-end;\n}\n\n.hz-navbar .hz-navbar__pages {\n  padding: 0 0.375em;\n}\n\n.hz-navbar .hz-navbar__total:before {\n  content: \"/\";\n}\n\n.hz-navbar__index-list-dialog {\n  position: absolute;\n}\n\n/* End _hz-navbar.structure */\n.hz-navbar {\n  background-color: rgba(0, 0, 0, 0.5);\n}\n\n.hz-navbar .hz-navbar__progress-percentage {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__btn {\n  transition: all 400ms ease;\n}\n\n.hz-navbar .hz-navbar__btn .hz-navbar__content {\n  position: absolute;\n  top: 0;\n  left: -99999em;\n}\n\n.hz-navbar .hz-navbar__btn:not([disabled]):hover, .hz-navbar .hz-navbar__btn:not([disabled]):focus {\n  transform: scale(1.2);\n}\n\n.hz-navbar .hz-navbar__btn[disabled] {\n  opacity: 0.5;\n  cursor: default;\n}\n\n.hz-navbar .hz-navbar__progress-bar {\n  border: 2px solid none;\n  background-color: #999;\n}\n\n.hz-navbar .hz-navbar__progress-value {\n  transition: all 400ms ease;\n  background-color: #ddd;\n}\n\n.hz-navbar .hz-navbar__actions .hz-navbar__btn {\n  font-size: 1em;\n}\n\n.hz-navbar .hz-navbar__actions .hz-navbar__btn:after {\n  transition: all 400ms ease;\n  font-family: FontAwesome;\n  font-size: 1.75em;\n}\n\n.hz-navbar .hz-navbar__action-home {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-home:not([disabled]):hover, .hz-navbar .hz-navbar__action-home:not([disabled]):focus {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-home:not([disabled]):hover:after, .hz-navbar .hz-navbar__action-home:not([disabled]):focus:after {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-home:after {\n  content: \"\\f015\";\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index:not([disabled]):hover, .hz-navbar .hz-navbar__action-index:not([disabled]):focus {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index:not([disabled]):hover:after, .hz-navbar .hz-navbar__action-index:not([disabled]):focus:after {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index:after {\n  content: \"\\f0ca\";\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn {\n  display: flex;\n  flex-direction: row;\n  align-items: center;\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn:after {\n  font-family: FontAwesome;\n  font-size: 1.875em;\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn.hz-navbar__prev:after {\n  content: \"\\f053\";\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn.hz-navbar__next:after {\n  content: \"\\f054\";\n}\n\n.hz-navbar .hz-navbar__pages {\n  color: #fff;\n}\n\n/* End _hz-navbar.theme-default */\n/* End components */\n\n/*# sourceMappingURL=main.scss.map */");
+__fsbx_css("sco1221/main.scss", "/* Estilos de prueba. NO UTILIZAR en proyecto*/\n/* Common */\n/*Cross browser: reset vendor styles*/\nhtml, body, span, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre,\narticle, aside, details, dialog, figcaption, figure, footer, header, main, nav, section, summary, audio, canvas, video, mark, code, kbd, pre, samp,\na, abbr, acronym, address, code, del, dfn, em, strong, img, q, dl, dt, dd, ol, ul,\nli, fieldset, form, label, legend, table, caption, tbody, tfoot, thead,\ntr, th, td, div {\n  line-height: initial;\n  margin: 0;\n  padding: 0;\n  border: none;\n  font-weight: normal;\n  font-style: normal;\n  font-size: 100%;\n  font-family: inherit;\n  vertical-align: baseline;\n  text-decoration: none;\n  -ms-box-sizing: border-box;\n  -webkit-box-sizing: border-box;\n  -moz-box-sizing: border-box;\n  box-sizing: border-box;\n}\n\nhtml {\n  font-family: sans-serif;\n  /* 1 */\n  line-height: 1.15;\n  /* 2 */\n  -ms-text-size-adjust: 100%;\n  /* 3 */\n  -webkit-text-size-adjust: 100%;\n  /* 3 */\n}\n\ninput, button, select, textarea {\n  line-height: initial;\n  margin: 0;\n  padding: 0;\n  font-weight: normal;\n  font-style: normal;\n  font-size: 100%;\n  font-family: inherit;\n  vertical-align: baseline;\n  text-decoration: none;\n  -ms-box-sizing: border-box;\n  -webkit-box-sizing: border-box;\n  -moz-box-sizing: border-box;\n  box-sizing: border-box;\n}\n\nul, ol, dl {\n  list-style: none;\n}\n\ninput[type=\"text\"] {\n  -webkit-appearance: none;\n}\n\nbody input[type=\"search\"] {\n  box-sizing: border-box;\n}\n\ni {\n  font-style: normal;\n}\n\n/*html elements*/\narticle,\naside,\ndetails,\nfigcaption,\nfigure,\nfooter,\nheader,\nmain,\nmenu,\nnav,\nsection,\nsummary {\n  /* 1 */\n  display: block;\n}\n\n/*! extends from normalize.css v4.1.1 | MIT License | github.com/necolas/normalize.css */\n/**\r\n * 1. Change the default font family in all browsers (opinionated).\r\n * 2. Correct the line height in all browsers.\r\n * 3. Prevent adjustments of font size after orientation changes in IE and iOS.\r\n */\nhtml {\n  font-family: sans-serif;\n  /* 1 */\n  font-size: 100%;\n  line-height: 1.15;\n  /* 2 */\n  -ms-text-size-adjust: 100%;\n  /* 3 */\n  -webkit-text-size-adjust: 100%;\n  /* 3 */\n}\n\n/**\r\n * Remove the margin in all browsers (opinionated).\r\n */\nbody {\n  margin: 0;\n}\n\n/* HTML5 display definitions\r\n   ========================================================================== */\n/**\r\n * Add the correct display in IE 9-.\r\n * 1. Add the correct display in Edge, IE, and Firefox.\r\n * 2. Add the correct display in IE.\r\n */\narticle,\naside,\ndetails,\nfigcaption,\nfigure,\nfooter,\nheader,\nmain,\nmenu,\nnav,\nsection,\nsummary {\n  /* 1 */\n  display: block;\n}\n\n/**\r\n * Add the correct display in IE 9-.\r\n */\naudio,\ncanvas,\nprogress,\nvideo {\n  display: inline-block;\n}\n\n/**\r\n * Add the correct display in iOS 4-7.\r\n */\naudio:not([controls]) {\n  display: none;\n  height: 0;\n}\n\n/**\r\n * Add the correct vertical alignment in Chrome, Firefox, and Opera.\r\n */\nprogress {\n  vertical-align: baseline;\n}\n\n/**\r\n * Add the correct display in IE 10-.\r\n * 1. Add the correct display in IE.\r\n */\ntemplate,\n[hidden] {\n  display: none;\n}\n\n/* Links\r\n   ========================================================================== */\n/**\r\n * 1. Remove the gray background on active links in IE 10.\r\n * 2. Remove gaps in links underline in iOS 8+ and Safari 8+.\r\n */\na {\n  background-color: transparent;\n  /* 1 */\n  -webkit-text-decoration-skip: objects;\n  /* 2 */\n}\n\n/**\r\n * Remove the outline on focused links when they are also active or hovered\r\n * in all browsers (opinionated).\r\n */\na:active,\na:hover,\na:visited {\n  outline-width: 0;\n  color: inherit;\n}\n\n/* Text-level semantics\r\n   ========================================================================== */\n/**\r\n * 1. Remove the bottom border in Firefox 39-.\r\n * 2. Add the correct text decoration in Chrome, Edge, IE, Opera, and Safari.\r\n */\nabbr[title] {\n  border-bottom: none;\n  /* 1 */\n  text-decoration: underline;\n  /* 2 */\n  text-decoration: underline dotted;\n  /* 2 */\n}\n\n/**\r\n * Prevent the duplicate application of `bolder` by the next rule in Safari 6.\r\n */\nb,\nstrong {\n  font-weight: inherit;\n}\n\n/**\r\n * Add the correct font weight in Chrome, Edge, and Safari.\r\n */\nb,\nstrong {\n  font-weight: bold;\n}\n\n/**\r\n * Add the correct font style in Android 4.3-.\r\n */\ndfn {\n  font-style: italic;\n}\n\n/**\r\n * Add the correct background and color in IE 9-.\r\n */\nmark {\n  background-color: #ff0;\n  color: #000;\n}\n\n/**\r\n * Add the correct font size in all browsers.\r\n */\nsmall {\n  font-size: 80%;\n}\n\n/**\r\n * Prevent `sub` and `sup` elements from affecting the line height in\r\n * all browsers.\r\n */\nsub,\nsup {\n  font-size: 75%;\n  line-height: 0;\n  position: relative;\n  vertical-align: baseline;\n}\n\nsub {\n  bottom: -0.25em;\n}\n\nsup {\n  top: -0.5em;\n}\n\n/* Embedded content\r\n   ========================================================================== */\n/**\r\n * Remove the border on images inside links in IE 10-.\r\n */\nimg {\n  border-style: none;\n  max-width: 100%;\n}\n\n/**\r\n * Hide the overflow in IE.\r\n */\nsvg:not(:root) {\n  overflow: hidden;\n}\n\n/* Grouping content\r\n   ========================================================================== */\n/**\r\n * 1. Correct the inheritance and scaling of font size in all browsers.\r\n * 2. Correct the odd `em` font sizing in all browsers.\r\n */\ncode,\nkbd,\npre,\nsamp {\n  font-family: monospace, monospace;\n  /* 1 */\n  font-size: 1em;\n  /* 2 */\n}\n\n/**\r\n * 1. Add the correct box sizing in Firefox.\r\n * 2. Show the overflow in Edge and IE.\r\n */\nhr {\n  box-sizing: content-box;\n  /* 1 */\n  height: 0;\n  /* 1 */\n  overflow: visible;\n  /* 2 */\n}\n\n/* Forms\r\n   ========================================================================== */\n/**\r\n * 1. Change font properties to `inherit` in all browsers (opinionated).\r\n * 2. Remove the margin in Firefox and Safari.\r\n */\nbutton,\ninput,\noptgroup,\nselect,\ntextarea {\n  font: inherit;\n  /* 1 */\n  margin: 0;\n  /* 2 */\n}\n\n/**\r\n * Restore the font weight unset by the previous rule.\r\n */\noptgroup {\n  font-weight: bold;\n}\n\n/**\r\n * Show the overflow in IE.\r\n * 1. Show the overflow in Edge.\r\n */\nbutton,\ninput {\n  /* 1 */\n  overflow: visible;\n}\n\n/**\r\n * Remove the inheritance of text transform in Edge, Firefox, and IE.\r\n * 1. Remove the inheritance of text transform in Firefox.\r\n */\nbutton,\nselect {\n  /* 1 */\n  text-transform: none;\n}\n\n/**\r\n * 1. Prevent a WebKit bug where (2) destroys native `audio` and `video`\r\n *    controls in Android 4.\r\n * 2. Correct the inability to style clickable types in iOS and Safari.\r\n */\nbutton,\nhtml [type=\"button\"],\n[type=\"reset\"],\n[type=\"submit\"] {\n  -webkit-appearance: button;\n  /* 2 */\n}\n\n/**\r\n * Remove the inner border and padding in Firefox.\r\n */\nbutton::-moz-focus-inner,\n[type=\"button\"]::-moz-focus-inner,\n[type=\"reset\"]::-moz-focus-inner,\n[type=\"submit\"]::-moz-focus-inner {\n  border-style: none;\n  padding: 0;\n}\n\n/**\r\n * 1. Correct the text wrapping in Edge and IE.\r\n * 2. Correct the color inheritance from `fieldset` elements in IE.\r\n * 3. Remove the padding so developers are not caught out when they zero out\r\n *    `fieldset` elements in all browsers.\r\n */\nlegend {\n  box-sizing: border-box;\n  /* 1 */\n  color: inherit;\n  /* 2 */\n  display: table;\n  /* 1 */\n  max-width: 100%;\n  /* 1 */\n  padding: 0;\n  /* 3 */\n  white-space: normal;\n  /* 1 */\n}\n\n/**\r\n * Remove the default vertical scrollbar in IE.\r\n */\ntextarea {\n  overflow: auto;\n}\n\n/**\r\n * Correct the cursor style of increment and decrement buttons in Chrome.\r\n */\n[type=\"number\"]::-webkit-inner-spin-button,\n[type=\"number\"]::-webkit-outer-spin-button {\n  height: auto;\n}\n\n/**\r\n * 1. Correct the odd appearance in Chrome and Safari.\r\n * 2. Correct the outline style in Safari.\r\n */\n[type=\"search\"] {\n  -webkit-appearance: textfield;\n  /* 1 */\n  outline-offset: -2px;\n  /* 2 */\n}\n\n/**\r\n * Remove the inner padding and cancel buttons in Chrome and Safari on OS X.\r\n */\n[type=\"search\"]::-webkit-search-cancel-button,\n[type=\"search\"]::-webkit-search-decoration {\n  -webkit-appearance: none;\n}\n\n/**\r\n * Correct the text style of placeholders in Chrome, Edge, and Safari.\r\n */\n::-webkit-input-placeholder {\n  color: inherit;\n  opacity: 0.54;\n}\n\n/**\r\n * 1. Correct the inability to style clickable types in iOS and Safari.\r\n * 2. Change font properties to `inherit` in Safari.\r\n */\n::-webkit-file-upload-button {\n  -webkit-appearance: button;\n  /* 1 */\n  font: inherit;\n  /* 2 */\n}\n\n/* End common */\n/* Components */\nbody {\n  width: 80%;\n  margin: 0 auto;\n  padding: 1em;\n}\n\n/* _mod-viewer */\n.mod-viewer {\n  height: 95vh;\n  display: flex;\n  flex-direction: column;\n  opacity: 0.9;\n  overflow: hidden;\n}\n\n.mod-viewer [data-hz-pages],\n.mod-viewer [hz-pages] {\n  overflow: auto;\n}\n\n/* End _mod-viewer */\n/* _hz-navbar.theme-default */\n/* _hz-navbar.structure */\n.hz-navbar {\n  display: flex;\n  padding: 0.75em;\n  align-items: center;\n}\n\n.hz-navbar .hz-navbar__btn {\n  margin: 0;\n  padding: 0;\n  border: none;\n  cursor: pointer;\n  background: none;\n  outline: none;\n}\n\n.hz-navbar .hz-navbar__progress {\n  width: 33.3%;\n  display: flex;\n  align-items: center;\n}\n\n.hz-navbar .hz-navbar__progress-mask {\n  position: absolute;\n  top: 0;\n  right: 0;\n  bottom: 0;\n  left: 0;\n  z-index: 1;\n}\n\n.hz-navbar .hz-navbar__progress-bar {\n  height: 1.125em;\n  width: 75%;\n  position: relative;\n}\n\n.hz-navbar .hz-navbar__progress-value {\n  height: 100%;\n  transform: scaleX(0);\n  transform-origin: left;\n}\n\n.hz-navbar .hz-navbar__progress-percentage {\n  margin-left: 0.375em;\n}\n\n.hz-navbar .hz-navbar__actions {\n  display: flex;\n  width: 33.3%;\n  justify-content: center;\n}\n\n.hz-navbar .hz-navbar__actions .hz-navbar__btn {\n  margin: 0 0.375em;\n}\n\n.hz-navbar .hz-navbar__pager {\n  display: flex;\n  align-items: center;\n  width: 33.3%;\n  justify-content: flex-end;\n}\n\n.hz-navbar .hz-navbar__pages {\n  padding: 0 0.375em;\n}\n\n.hz-navbar .hz-navbar__total:before {\n  content: \"/\";\n}\n\n.hz-navbar__dialog {\n  position: absolute;\n  background-color: #fff;\n}\n\n.ui-widget-overlay {\n  background-color: rgba(0, 0, 0, 0.25);\n}\n\n/* End _hz-navbar.structure */\n.hz-navbar {\n  background-color: rgba(0, 0, 0, 0.5);\n}\n\n.hz-navbar .hz-navbar__progress-percentage {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__btn {\n  transition: all 400ms ease;\n}\n\n.hz-navbar .hz-navbar__btn .hz-navbar__content {\n  position: absolute;\n  top: 0;\n  left: -99999em;\n}\n\n.hz-navbar .hz-navbar__btn:not([disabled]):hover, .hz-navbar .hz-navbar__btn:not([disabled]):focus {\n  transform: scale(1.2);\n}\n\n.hz-navbar .hz-navbar__btn[disabled] {\n  opacity: 0.5;\n  cursor: default;\n}\n\n.hz-navbar .hz-navbar__progress-bar {\n  border: 2px solid none;\n  background-color: #999;\n}\n\n.hz-navbar .hz-navbar__progress-value {\n  transition: all 400ms ease;\n  background-color: #ddd;\n}\n\n.hz-navbar .hz-navbar__actions .hz-navbar__btn {\n  font-size: 1em;\n}\n\n.hz-navbar .hz-navbar__actions .hz-navbar__btn:after {\n  transition: all 400ms ease;\n  font-family: FontAwesome;\n  font-size: 1.75em;\n}\n\n.hz-navbar .hz-navbar__action-home {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-home:not([disabled]):hover, .hz-navbar .hz-navbar__action-home:not([disabled]):focus {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-home:not([disabled]):hover:after, .hz-navbar .hz-navbar__action-home:not([disabled]):focus:after {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-home:after {\n  content: \"\\f015\";\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index:not([disabled]):hover, .hz-navbar .hz-navbar__action-index:not([disabled]):focus {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index:not([disabled]):hover:after, .hz-navbar .hz-navbar__action-index:not([disabled]):focus:after {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index:after {\n  content: \"\\f0ca\";\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-exit {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-exit:not([disabled]):hover, .hz-navbar .hz-navbar__action-exit:not([disabled]):focus {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-exit:not([disabled]):hover:after, .hz-navbar .hz-navbar__action-exit:not([disabled]):focus:after {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-exit:after {\n  content: \"\\f08b\";\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn {\n  display: flex;\n  flex-direction: row;\n  align-items: center;\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn:after {\n  font-family: FontAwesome;\n  font-size: 1.875em;\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn.hz-navbar__prev:after {\n  content: \"\\f053\";\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn.hz-navbar__next:after {\n  content: \"\\f054\";\n}\n\n.hz-navbar .hz-navbar__pages {\n  color: #fff;\n}\n\n.ui-dialog.hz-navbar__dialog {\n  padding: 0;\n  box-shadow: 0 4px 5px 0 rgba(0, 0, 0, 0.14), 0 1px 10px 0 rgba(0, 0, 0, 0.12), 0 2px 4px -1px rgba(0, 0, 0, 0.2);\n}\n\n.ui-dialog.hz-navbar__dialog .ui-dialog-titlebar {\n  background-color: #999;\n}\n\n.ui-dialog.hz-navbar__dialog .ui-dialog-titlebar-close {\n  font-size: 0;\n  background: none;\n  border: none;\n  cursor: pointer;\n}\n\n.ui-dialog.hz-navbar__dialog .ui-dialog-titlebar-close:after {\n  content: \"\\f00d\";\n  font-size: 1rem;\n  color: #fff;\n  font-family: \"FontAwesome\";\n}\n\n.ui-dialog.hz-navbar__dialog .hz-navbar__index-item .hz-navbar__index-item-content {\n  color: #666;\n  cursor: default;\n}\n\n.ui-dialog.hz-navbar__dialog .hz-navbar__index-item.hz-navbar__page--completed .hz-navbar__index-item-content {\n  color: #999;\n  cursor: pointer;\n}\n\n.ui-dialog.hz-navbar__dialog .hz-navbar__index-item.hz-navbar__page--visited .hz-navbar__index-item-content,\n.ui-dialog.hz-navbar__dialog .hz-navbar__index-item.hz-navbar__page--completed + .hz-navbar__index-item .hz-navbar__index-item-content {\n  color: #333;\n  cursor: pointer;\n}\n\n/* End _hz-navbar.theme-default */\n/* End components */\n\n/*# sourceMappingURL=main.scss.map */");
 });
 ___scope___.file("sco1221/markdown.scss", function(exports, require, module, __filename, __dirname){
 
@@ -10460,7 +10571,7 @@ var HzLocutionResource = /** @class */ (function (_super) {
         sound.on("playerror", this._onPlayError.bind(this));
         sound.on("play", this._onPlay.bind(this));
         this._sound = sound;
-        if (this._options.playOn != "auto") {
+        if (this._options.playOn != "auto" && this._options.playOn != "none") {
             var config_1 = this._options.playOn, playOn = config_1.split(":"), event = playOn[0], target = playOn.length > 1 ? this._$(playOn[1]) : this._$element;
             target.on(event, { instance: this }, this._onTargetEvent);
         }
@@ -10499,9 +10610,13 @@ var HzLocutionResource = /** @class */ (function (_super) {
             this._markAsCompleted();
         }
     };
-    HzLocutionResource.prototype.play = function (delay) {
+    HzLocutionResource.prototype.play = function (force) {
         var _this = this;
-        if (delay === void 0) { delay = true; }
+        if (force === void 0) { force = false; }
+        if (force) {
+            this._unlock();
+            this.enable();
+        }
         if (!this.isDisabled() && this._sound) {
             //stop the current audio
             if (HzLocutionRuntime.currentAudio) {
@@ -10519,6 +10634,9 @@ var HzLocutionResource = /** @class */ (function (_super) {
     HzLocutionResource.prototype.stop = function () {
         if (this._sound) {
             this._sound.stop();
+            if (this._options.completeOnStop) {
+                this._markAsCompleted();
+            }
         }
     };
     HzLocutionResource.prototype.disable = function () {
@@ -10550,7 +10668,8 @@ var HzLocutionResource = /** @class */ (function (_super) {
     HzLocutionResource.DEFAULTS_QUIZ = {};
     HzLocutionResource.DEFAULTS = {
         playOn: "auto",
-        completeOnPlay: false
+        completeOnPlay: false,
+        completeOnStop: false
     };
     HzLocutionResource = HzLocutionResource_1 = __decorate([
         core_1.Resource({
@@ -10654,7 +10773,7 @@ exports.page.on(core_1.PageController.ON_DESTROY, null, function (eventObject, $
 });
 ___scope___.file("sco1221/pages/6613/page.pug", function(exports, require, module, __filename, __dirname){
 
-module.exports.default =  "\n<div>\n  <h1>Audio after other resource</h1>\n  <button data-hz-resource=\"HzAnim\" data-opt-hz-anim-on=\"click\" data-opt-hz-anim-do=\"transition.fadeIn\" data-opt-hz-anim-with=\"{&quot;duration&quot;:1000}\" data-opt-hz-anim-to=\".target\">Do to .target</button>\n  <p class=\"target\" data-hz-resource=\"HzLocution\" data-opt-hz-locution-files=\"./assets/short.mp3\" style=\"display:none;\">Here the text with locution</p>\n</div>";
+module.exports.default =  "\n<div>\n  <h1>Audio after other resource</h1>\n  <button data-hz-resource=\"HzAnim\" data-opt-hz-anim-on=\"click\" data-opt-hz-anim-do=\"transition.fadeIn\" data-opt-hz-anim-with=\"{&quot;duration&quot;:1000}\" data-opt-hz-anim-to=\".target\">Do to .target</button>\n  <p class=\"target\" data-hz-resource=\"HzLocution\" data-opt-hz-locution-files=\"./assets/short.mp3\" style=\"display:none\">Here the text with locution</p>\n</div>";
 });
 ___scope___.file("sco1221/pages/6614/page.js", function(exports, require, module, __filename, __dirname){
 
@@ -10698,11 +10817,11 @@ exports.page.on(core_1.PageController.ON_DESTROY, null, function (eventObject, $
 });
 ___scope___.file("sco1221/pages/6614/page.pug", function(exports, require, module, __filename, __dirname){
 
-module.exports.default =  "\n<div>\n  <h1>Audio when button is clicked</h1>\n  <button class=\"locutionTrigger\" data-hz-resource=\"HzAnim\" data-opt-hz-anim-on=\"click\" data-opt-hz-anim-do=\"transition.fadeIn\" data-opt-hz-anim-with=\"{&quot;duration&quot;:1000}\" data-opt-hz-anim-to=\".target\">Do to .target</button>\n  <p class=\"target\" data-hz-resource=\"HzLocution\" data-opt-hz-locution-files=\"./assets/long.mp3\" data-opt-hz-locution-play-on=\"click:.locutionTrigger\" style=\"display:none;\">Here the text with locution</p>\n</div>";
+module.exports.default =  "\n<div>\n  <h1>Audio when button is clicked</h1>\n  <button class=\"locutionTrigger\" data-hz-resource=\"HzAnim\" data-opt-hz-anim-on=\"click\" data-opt-hz-anim-do=\"transition.fadeIn\" data-opt-hz-anim-with=\"{&quot;duration&quot;:1000}\" data-opt-hz-anim-to=\".target\">Do to .target</button>\n  <p class=\"target\" data-hz-resource=\"HzLocution\" data-opt-hz-locution-files=\"./assets/long.mp3\" data-opt-hz-locution-play-on=\"click:.locutionTrigger\" style=\"display:none\">Here the text with locution</p>\n</div>";
 });
 ___scope___.file("sco1221/sco.pug", function(exports, require, module, __filename, __dirname){
 
-module.exports.default =  "\n<div data-hz-pages=\"data-hz-pages\"></div>\n<div class=\"hz-navbar\" data-hz-component=\"HzNavbar\">\n  <div class=\"hz-navbar__progress\">\n    <div class=\"hz-navbar__progress-bar\">\n      <div class=\"hz-navbar__progress-mask\"></div>\n      <div class=\"hz-navbar__progress-value\" data-hz-navbar-bar=\"data-hz-navbar-bar\"></div>\n    </div>\n    <div class=\"hz-navbar__content hz-navbar__progress-percentage\" data-hz-navbar-progress=\"data-hz-navbar-progress\"></div>\n  </div>\n  <div class=\"hz-navbar__actions\">\n    <button class=\"hz-navbar__btn hz-navbar__action-home\" data-hz-navbar-home=\"data-hz-navbar-home\" data-hz-navbar-content=\"home\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"home\"></span></button>\n    <button class=\"hz-navbar__btn hz-navbar__action-index\" data-hz-navbar-index=\"data-hz-navbar-index\" data-hz-navbar-content=\"showIndex\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"showIndex\"></span></button>\n  </div>\n  <div class=\"hz-navbar__pager\">\n    <button class=\"hz-navbar__btn hz-navbar__prev\" data-hz-navbar-prev=\"data-hz-navbar-prev\" data-hz-navbar-content=\"prev\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"prev\"></span></button>\n    <p class=\"hz-navbar__pages\"><span class=\"hz-navbar__content hz-navbar__current\" data-hz-navbar-current=\"data-hz-navbar-current\" data-hz-navbar-content-to=\"title\" data-hz-navbar-content=\"currentPage\"></span><span class=\"hz-navbar__content hz-navbar__total\" data-hz-navbar-total=\"data-hz-navbar-total\" data-hz-navbar-content-to=\"title\" data-hz-navbar-content=\"totalPages\"></span></p>\n    <button class=\"hz-navbar__btn hz-navbar__next\" data-hz-navbar-next=\"data-hz-navbar-next\" data-hz-navbar-content=\"next\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"next\"></span></button>\n  </div>\n  <ul class=\"hz-navbar__index-list\" data-hz-navbar-index-list=\"data-hz-navbar-index-list\">\n    <li class=\"hz-navbar__index-item\" data-hz-navbar-index-list-item=\"data-hz-navbar-index-list-item\"><a class=\"hz-navbar__index-item-content\" data-hz-navbar-index-list-item-content=\"data-hz-navbar-index-list-item-content\" href=\"javascript:void(0)\"></a></li>\n  </ul>\n</div>";
+module.exports.default =  "\n<div data-hz-pages=\"data-hz-pages\"></div>\n<div class=\"hz-navbar\" data-hz-component=\"HzNavbar\">\n  <div class=\"hz-navbar__progress\">\n    <div class=\"hz-navbar__progress-bar\">\n      <div class=\"hz-navbar__progress-mask\"></div>\n      <div class=\"hz-navbar__progress-value\" data-hz-navbar-bar=\"data-hz-navbar-bar\"></div>\n    </div>\n    <div class=\"hz-navbar__content hz-navbar__progress-percentage\" data-hz-navbar-progress=\"data-hz-navbar-progress\"></div>\n  </div>\n  <div class=\"hz-navbar__actions\">\n    <button class=\"hz-navbar__btn hz-navbar__action-home\" data-hz-navbar-home=\"data-hz-navbar-home\" data-hz-navbar-content=\"home\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"home\"></span></button>\n    <button class=\"hz-navbar__btn hz-navbar__action-index\" data-hz-navbar-index=\"data-hz-navbar-index\" data-hz-navbar-content=\"showIndex\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"showIndex\"></span></button>\n    <button class=\"hz-navbar__btn hz-navbar__action-exit\" data-hz-navbar-exit=\"data-hz-navbar-exit\" data-hz-navbar-content=\"exit\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"exit\"></span></button>\n  </div>\n  <div class=\"hz-navbar__pager\">\n    <button class=\"hz-navbar__btn hz-navbar__prev\" data-hz-navbar-prev=\"data-hz-navbar-prev\" data-hz-navbar-content=\"prev\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"prev\"></span></button>\n    <p class=\"hz-navbar__pages\"><span class=\"hz-navbar__content hz-navbar__current\" data-hz-navbar-current=\"data-hz-navbar-current\" data-hz-navbar-content-to=\"title\" data-hz-navbar-content=\"currentPage\"></span><span class=\"hz-navbar__content hz-navbar__total\" data-hz-navbar-total=\"data-hz-navbar-total\" data-hz-navbar-content-to=\"title\" data-hz-navbar-content=\"totalPages\"></span></p>\n    <button class=\"hz-navbar__btn hz-navbar__next\" data-hz-navbar-next=\"data-hz-navbar-next\" data-hz-navbar-content=\"next\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"next\"></span></button>\n  </div>\n  <ul class=\"hz-navbar__dialog hz-navbar__index-list\" data-hz-navbar-index-list=\"data-hz-navbar-index-list\">\n    <li class=\"hz-navbar__index-item\" data-hz-navbar-index-list-item=\"data-hz-navbar-index-list-item\"><a class=\"hz-navbar__index-item-content\" data-hz-navbar-index-list-item-content=\"data-hz-navbar-index-list-item-content\" href=\"javascript:void(0)\"></a></li>\n  </ul>\n  <div class=\"hz-navbar__dialog hz-navbar__exit-dialog\" data-hz-navbar-exit-dialog=\"data-hz-navbar-exit-dialog\">\n    <p data-hz-navbar-content=\"exitMessage\"></p>\n  </div>\n</div>";
 });
 });
 FuseBox.pkg("jquery", {}, function(___scope___){
@@ -13237,6 +13356,8 @@ var ScoController = /** @class */ (function () {
             this._$context.prepend(this._options.template);
             this._$context.addClass(ScoController_1.CLASS_CONTEXT);
             this._$pagesContainer = this._$context.find("[data-hz-pages]");
+            this._$exit = this._$context.find("[data-hz-on-exit]");
+            this._$exit.detach();
             this._eventEmitter.globalEmitter.on(PageController_1.PageController.ON_COMPLETE_CHANGE, { instance: this }, this._onPageStateChange);
             this._eventEmitter.globalEmitter.on(PageController_1.PageController.ON_SHOWN, { instance: this }, this._onPageShown);
             //page contexts must exists
@@ -13315,7 +13436,36 @@ var ScoController = /** @class */ (function () {
             instance._scormService.doLMSCommit();
         }
     };
+    ScoController.prototype.exit = function () {
+        this._eventEmitter.globalEmitter.trigger(ScoController_1.ON_BEFORE_EXIT);
+        if (this._scormService.LMSIsInitialized()) {
+            // enviamos un exit
+            this._scormService.doLMSSetValue("cmi.core.exit", "");
+            //los tiempos
+            var sessionTime = this.getSessionTime();
+            this._scormService.doLMSSetValue("cmi.core.session_time", sessionTime);
+            this._scormService.doLMSCommit();
+            this._scormService.doLMSFinish();
+        }
+        this._$context.empty();
+        if (this._$exit && this._$exit.length > 0) {
+            this._$context.append(this._$exit);
+        }
+        else if (this._options.exitMessage) {
+            this._$context.text(this._options.exitMessage);
+        }
+        this._eventEmitter.globalEmitter.trigger(ScoController_1.ON_EXIT);
+    };
+    ScoController.prototype.getSessionTime = function () {
+        var now = Date.now(), sessionTime = now - this._dateStart.getTime();
+        var hours = Math.floor(sessionTime / (1000 * 60 * 60) % 60), minutes = Math.floor(sessionTime / (1000 * 60) % 60), seconds = Math.floor(sessionTime / 1000 % 60);
+        hours = hours < 10 ? '0' + hours : hours;
+        minutes = minutes < 10 ? '0' + minutes : minutes;
+        seconds = seconds < 10 ? '0' + seconds : seconds;
+        return hours + ':' + minutes + ':' + seconds;
+    };
     ScoController.prototype.run = function () {
+        this._dateStart = new Date();
         this._init();
         this._Navigator.activate(this._$pagesContainer);
         this._$pagesContainer.addClass(ScoController_1.CLASS_PAGES);
@@ -13332,8 +13482,11 @@ var ScoController = /** @class */ (function () {
         }
         return this;
     };
+    ScoController.NAMESPACE = "sco";
     ScoController.CLASS_CONTEXT = "hz-container";
     ScoController.CLASS_PAGES = "hz-pages-container";
+    ScoController.ON_EXIT = ScoController_1.NAMESPACE + ":exit";
+    ScoController.ON_BEFORE_EXIT = ScoController_1.NAMESPACE + ":beforeexit";
     ScoController = ScoController_1 = __decorate([
         di_1.Sco({
             name: "ScoController",
@@ -13549,6 +13702,7 @@ var PageController = /** @class */ (function () {
         }
         $element.addClass(PageController_1.CLASS_PAGE + " " + PageController_1.CLASS_PAGE + "-" + this.options.name);
         this.$element = $element;
+        this.eventEmitter.globalEmitter.trigger(PageController_1.ON_RENDERING, [this.$element, this]);
         return $element;
     };
     PageController.prototype._render = function (template) {
@@ -13581,6 +13735,7 @@ var PageController = /** @class */ (function () {
      */
     PageController.prototype.show = function ($oldPage, oldPageRelativePosition) {
         var deferred = this._$.Deferred(), promise = deferred.promise(), event = this.eventEmitter.createEvent(PageController_1.ON_SHOW), result = this.eventEmitter.trigger(event, [this.$element, $oldPage, oldPageRelativePosition, this]);
+        this.eventEmitter.globalEmitter.trigger(PageController_1.ON_SHOW, [this.$element, $oldPage, oldPageRelativePosition, this]);
         if (!event.isDefaultPrevented()) {
             //if the user doesn't prevent default
             this._show($oldPage, oldPageRelativePosition).then(function () {
@@ -16138,17 +16293,33 @@ var ScoFactory = /** @class */ (function () {
     }
     ScoFactory_1 = ScoFactory;
     ScoFactory.createSco = function (options) {
-        var ScoControllerFactory = di_1.Injector.getInstance(ScoFactory_1).get(Sco_1.ScoController);
-        var sco = ScoControllerFactory.instance();
-        sco.activate(options);
-        return sco;
+        if (!ScoFactory_1.SCO) {
+            var ScoControllerFactory = di_1.Injector.getInstance(ScoFactory_1).get(Sco_1.ScoController);
+            var sco = ScoControllerFactory.instance();
+            sco.activate(options);
+            ScoFactory_1.SCO = sco;
+            return sco;
+        }
+        else {
+            throw "[ScoFactory] Error, only 1 sco is allowed";
+        }
     };
     ScoFactory.registerSco = function (scoController, options) {
-        var ScoControllerFactory = di_1.Injector.getInstance(ScoFactory_1).get(scoController);
-        var sco = ScoControllerFactory.instance();
-        sco.activate(options);
-        return sco;
+        if (!ScoFactory_1.SCO) {
+            var ScoControllerFactory = di_1.Injector.getInstance(ScoFactory_1).get(scoController);
+            var sco = ScoControllerFactory.instance();
+            sco.activate(options);
+            ScoFactory_1.SCO = sco;
+            return sco;
+        }
+        else {
+            throw "[ScoFactory] Error, only 1 sco is allowed";
+        }
     };
+    ScoFactory.getCurrentSco = function () {
+        return ScoFactory_1.SCO;
+    };
+    ;
     ScoFactory = ScoFactory_1 = __decorate([
         di_1.Core({
             name: "ScoFactory",
@@ -16377,12 +16548,20 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
 ;(function(undefined) {
     'use strict';
     /**
-     * BottleJS v1.6.3 - 2017-12-06
+     * BottleJS v1.7.0 - 2018-01-29
      * A powerful dependency injection micro container
      *
-     * Copyright (c) 2017 Stephen Young
+     * Copyright (c) 2018 Stephen Young
      * Licensed MIT
      */
+    /**
+     * String constants
+     */
+    var DELIMITER = '.';
+    var FUNCTION_TYPE = 'function';
+    var STRING_TYPE = 'string';
+    var GLOBAL_NAME = '__global__';
+    var PROVIDER_SUFFIX = 'Provider';
     
     /**
      * Unique id counter;
@@ -16442,7 +16621,7 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
      * @return Service
      */
     var getNestedService = function getNestedService(fullname) {
-        return fullname.split('.').reduce(getNested, this);
+        return fullname.split(DELIMITER).reduce(getNested, this);
     };
     
     /**
@@ -16453,7 +16632,7 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
      * @return Bottle
      */
     var constant = function constant(name, value) {
-        var parts = name.split('.');
+        var parts = name.split(DELIMITER);
         name = parts.pop();
         defineConstant.call(parts.reduce(setValueObject, this.container), name, value);
         return this;
@@ -16477,15 +16656,15 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
      */
     var decorator = function decorator(fullname, func) {
         var parts, name;
-        if (typeof fullname === 'function') {
+        if (typeof fullname === FUNCTION_TYPE) {
             func = fullname;
-            fullname = '__global__';
+            fullname = GLOBAL_NAME;
         }
     
-        parts = fullname.split('.');
+        parts = fullname.split(DELIMITER);
         name = parts.shift();
         if (parts.length) {
-            getNestedBottle.call(this, name).decorator(parts.join('.'), func);
+            getNestedBottle.call(this, name).decorator(parts.join(DELIMITER), func);
         } else {
             if (!this.decorators[name]) {
                 this.decorators[name] = [];
@@ -16610,15 +16789,15 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
      */
     var middleware = function middleware(fullname, func) {
         var parts, name;
-        if (typeof fullname === 'function') {
+        if (typeof fullname === FUNCTION_TYPE) {
             func = fullname;
-            fullname = '__global__';
+            fullname = GLOBAL_NAME;
         }
     
-        parts = fullname.split('.');
+        parts = fullname.split(DELIMITER);
         name = parts.shift();
         if (parts.length) {
-            getNestedBottle.call(this, name).middleware(parts.join('.'), func);
+            getNestedBottle.call(this, name).middleware(parts.join(DELIMITER), func);
         } else {
             if (!this.middlewares[name]) {
                 this.middlewares[name] = [];
@@ -16646,7 +16825,7 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
      */
     var pop = function pop(name) {
         var instance;
-        if (typeof name === 'string') {
+        if (typeof name === STRING_TYPE) {
             instance = bottles[name];
             if (!instance) {
                 bottles[name] = instance = new Bottle();
@@ -16661,7 +16840,7 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
      * Clear all named bottles.
      */
     var clear = function clear(name) {
-        if (typeof name === 'string') {
+        if (typeof name === STRING_TYPE) {
             delete bottles[name];
         } else {
             bottles = {};
@@ -16688,8 +16867,8 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
      */
     var provider = function provider(fullname, Provider) {
         var parts, name;
-        parts = fullname.split('.');
-        if (this.providerMap[fullname] && parts.length === 1 && !this.container[fullname + 'Provider']) {
+        parts = fullname.split(DELIMITER);
+        if (this.providerMap[fullname] && parts.length === 1 && !this.container[fullname + PROVIDER_SUFFIX]) {
             return console.error(fullname + ' provider already instantiated.');
         }
         this.originalProviders[fullname] = Provider;
@@ -16698,7 +16877,7 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
         name = parts.shift();
     
         if (parts.length) {
-            getNestedBottle.call(this, name).provider(parts.join('.'), Provider);
+            getNestedBottle.call(this, name).provider(parts.join(DELIMITER), Provider);
             return this;
         }
         return createProvider.call(this, name, Provider);
@@ -16727,7 +16906,7 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
         container = this.container;
         decorators = this.decorators;
         middlewares = this.middlewares;
-        providerName = name + 'Provider';
+        providerName = name + PROVIDER_SUFFIX;
     
         properties = Object.create(null);
         properties[providerName] = {
@@ -16792,7 +16971,7 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
     var removeProviderMap = function resetProvider(name) {
         delete this.providerMap[name];
         delete this.container[name];
-        delete this.container[name + 'Provider'];
+        delete this.container[name + PROVIDER_SUFFIX];
     };
     
     /**
@@ -16803,7 +16982,7 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
     var resetProviders = function resetProviders() {
         var providers = this.originalProviders;
         Object.keys(this.originalProviders).forEach(function resetPrvider(provider) {
-            var parts = provider.split('.');
+            var parts = provider.split(DELIMITER);
             if (parts.length > 1) {
                 parts.forEach(removeProviderMap, getNestedBottle.call(this, parts[0]));
             }
@@ -16828,23 +17007,41 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
     };
     
     /**
-     * Register a service inside a generic factory.
+     * Register a function service
+     */
+    var serviceFactory = function serviceFactory(name, factoryService) {
+        return createService.apply(this, [name, factoryService, false].concat(slice.call(arguments, 2)));
+    };
+    
+    /**
+     * Register a class service
      *
      * @param String name
      * @param Function Service
      * @return Bottle
      */
     var service = function service(name, Service) {
-        var deps = arguments.length > 2 ? slice.call(arguments, 2) : null;
+        return createService.apply(this, [name, Service, true].concat(slice.call(arguments, 2)));
+    };
+    
+    /**
+     * Private helper for creating service and service factories.
+     *
+     * @param String name
+     * @param Function Service
+     * @return Bottle
+     */
+    var createService = function createService(name, Service, isClass) {
+        var deps = arguments.length > 3 ? slice.call(arguments, 3) : [];
         var bottle = this;
         return factory.call(this, name, function GenericFactory() {
-            var ServiceCopy = Service;
-            if (deps) {
-                var args = deps.map(getNestedService, bottle.container);
-                args.unshift(Service);
-                ServiceCopy = Service.bind.apply(Service, args);
+            var serviceFactory = Service; // alias for jshint
+            var args = deps.map(getNestedService, bottle.container);
+    
+            if (!isClass) {
+                return serviceFactory.apply(null, args);
             }
-            return new ServiceCopy();
+            return new (Service.bind.apply(Service, [null].concat(args)))();
         });
     };
     
@@ -16857,7 +17054,7 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
      */
     var value = function value(name, val) {
         var parts;
-        parts = name.split('.');
+        parts = name.split(DELIMITER);
         name = parts.pop();
         defineValue.call(parts.reduce(setValueObject, this.container), name, val);
         return this;
@@ -16938,6 +17135,7 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
         register : register,
         resolve : resolve,
         service : service,
+        serviceFactory : serviceFactory,
         value : value
     };
     
@@ -17007,7 +17205,7 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
         /**
          * Export
          */
-        if (typeof define === 'function' && typeof define.amd === 'object' && define.amd) {
+        if (typeof define === FUNCTION_TYPE && typeof define.amd === 'object' && define.amd) {
             root.Bottle = Bottle;
             define(function() { return Bottle; });
         } else if (freeExports && freeModule) {
@@ -17363,7 +17561,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 var core_1 = require("@haztivity/core");
 require("jquery-ui-dist/jquery-ui");
-var HzNavbarComponent = HzNavbarComponent_1 = (function (_super) {
+var HzNavbarComponent = /** @class */ (function (_super) {
     __extends(HzNavbarComponent, _super);
     function HzNavbarComponent(_$, _EventEmitterFactory, _Navigator, _PageManager, _DataOptions) {
         var _this = _super.call(this, _$, _EventEmitterFactory) || this;
@@ -17374,13 +17572,43 @@ var HzNavbarComponent = HzNavbarComponent_1 = (function (_super) {
         _this._numPages = 0;
         return _this;
     }
+    HzNavbarComponent_1 = HzNavbarComponent;
     HzNavbarComponent.prototype.init = function (options, config) {
         this._options = core_1.$.extend(true, {}, HzNavbarComponent_1._DEFAULTS, options);
         this._getElements();
         this.updateLocale();
+        this._initExitDialog();
         this.progress(0);
         this._assignEvents();
         this.updatePaginator();
+    };
+    HzNavbarComponent.prototype._initExitDialog = function () {
+        var locale = this._options.locale[this._options.lang] || this._options.locale[this._options.defaultLang];
+        var options = this._DataOptions.getDataOptions(this._$exitDialog, "dialog");
+        options = core_1.$.extend(true, options, {
+            autoOpen: false,
+            show: "fade",
+            hide: "fade",
+            resizable: false,
+            modal: true,
+            buttons: [
+                {
+                    text: locale.exitOk,
+                    click: this._onConfirmExit.bind(this)
+                },
+                {
+                    text: locale.exitKo,
+                    click: this._onCancelExit.bind(this)
+                }
+            ]
+        });
+        if (options.dialogClass) {
+            options.dialogClass += " " + HzNavbarComponent_1.CLASS_LIST_EXIT_DIALOG;
+        }
+        else {
+            options.dialogClass = HzNavbarComponent_1.CLASS_LIST_EXIT_DIALOG;
+        }
+        this._$exitDialog.dialog(options);
     };
     HzNavbarComponent.prototype.updatePaginator = function () {
         var numPages = this._PageManager.count();
@@ -17473,7 +17701,7 @@ var HzNavbarComponent = HzNavbarComponent_1 = (function (_super) {
     HzNavbarComponent.prototype._generateIndex = function () {
         if (this._$indexList && this._$indexList.length > 0 && this._$indexListItemTemplate && this._$indexListItemTemplate.length > 0) {
             this._$indexListItemTemplate.detach();
-            var options = core_1.$.extend({}, HzNavbarComponent_1.OPT_DIALOG_DEFAULTS, this._DataOptions.getDataOptions(this._$indexList, HzNavbarComponent_1.PREFIX_LIST_DIALOG_OPTIONS));
+            var options = core_1.$.extend(true, {}, HzNavbarComponent_1.OPT_DIALOG_DEFAULTS, this._DataOptions.getDataOptions(this._$indexList, "dialog"));
             options.dialogClass = HzNavbarComponent_1.CLASS_LIST_INDEX_DIALOG;
             this._$indexList.dialog(options);
             this._indexListDialog = this._$indexList.data("ui-dialog");
@@ -17517,6 +17745,8 @@ var HzNavbarComponent = HzNavbarComponent_1 = (function (_super) {
         this._$progress = this._$element.find(HzNavbarComponent_1.QUERY_PROGRESS);
         this._$homeBtn = this._$element.find(HzNavbarComponent_1.QUERY_ACTION_HOME);
         this._$indexBtn = this._$element.find(HzNavbarComponent_1.QUERY_ACTION_INDEX);
+        this._$exitBtn = this._$element.find(HzNavbarComponent_1.QUERY_ACTION_EXIT);
+        this._$exitDialog = this._$element.find(HzNavbarComponent_1.QUERY_ACTION_EXIT_DIALOG);
         this._$currentPageIndex = this._$element.find(HzNavbarComponent_1.QUERY_PAGE_CURRENT);
         this._$numPages = this._$element.find(HzNavbarComponent_1.QUERY_PAGE_TOTAL);
         this._$indexList = this._$element.find(HzNavbarComponent_1.QUERY_INDEX_LIST);
@@ -17531,6 +17761,7 @@ var HzNavbarComponent = HzNavbarComponent_1 = (function (_super) {
         this._$prevBtn.on("click." + HzNavbarComponent_1.NAMESPACE, { instance: this }, this._onPrevClick);
         this._$homeBtn.on("click." + HzNavbarComponent_1.NAMESPACE, { instance: this }, this._onHomeClick);
         this._$indexBtn.on("click." + HzNavbarComponent_1.NAMESPACE, { instance: this }, this._onIndexClick);
+        this._$exitBtn.on("click." + HzNavbarComponent_1.NAMESPACE, { instance: this }, this._onExitClick);
         this._$indexList.on("click." + HzNavbarComponent_1.NAMESPACE, HzNavbarComponent_1.QUERY_INDEX_LIST_ITEM, { instance: this }, this._onIndexListItemClick);
         this._Navigator.on(core_1.Navigator.ON_DISABLE, { instance: this }, this._onDisabled);
         this._Navigator.on(core_1.Navigator.ON_ENABLE, { instance: this }, this._onEnabled);
@@ -17565,6 +17796,18 @@ var HzNavbarComponent = HzNavbarComponent_1 = (function (_super) {
     };
     HzNavbarComponent.prototype._onHomeClick = function (e) {
         var instance = e.data.instance;
+        instance._Navigator.goTo(0);
+    };
+    HzNavbarComponent.prototype._onExitClick = function (e) {
+        var instance = e.data.instance;
+        instance._$exitDialog.dialog("open");
+    };
+    HzNavbarComponent.prototype._onCancelExit = function () {
+        this._$exitDialog.dialog("close");
+    };
+    HzNavbarComponent.prototype._onConfirmExit = function () {
+        this._$exitDialog.dialog("close").dialog("destroy");
+        core_1.ScoFactory.getCurrentSco().exit();
     };
     HzNavbarComponent.prototype._onIndexClick = function (e) {
         var instance = e.data.instance;
@@ -17695,57 +17938,66 @@ var HzNavbarComponent = HzNavbarComponent_1 = (function (_super) {
         var instance = e.data.instance;
         instance._updatePagerButtonState();
     };
+    HzNavbarComponent.NAMESPACE = "hzNavbar";
+    HzNavbarComponent.PREFIX = "hz-navbar";
+    HzNavbarComponent.QUERY_ACTION_NEXT = "[data-" + HzNavbarComponent_1.PREFIX + "-next]";
+    HzNavbarComponent.QUERY_ACTION_PREV = "[data-" + HzNavbarComponent_1.PREFIX + "-prev]";
+    HzNavbarComponent.QUERY_BAR = "[data-" + HzNavbarComponent_1.PREFIX + "-bar]";
+    HzNavbarComponent.QUERY_PROGRESS = "[data-" + HzNavbarComponent_1.PREFIX + "-progress]";
+    HzNavbarComponent.QUERY_ACTION_HOME = "[data-" + HzNavbarComponent_1.PREFIX + "-home]";
+    HzNavbarComponent.QUERY_ACTION_INDEX = "[data-" + HzNavbarComponent_1.PREFIX + "-index]";
+    HzNavbarComponent.QUERY_ACTION_EXIT = "[data-" + HzNavbarComponent_1.PREFIX + "-exit]";
+    HzNavbarComponent.QUERY_ACTION_EXIT_DIALOG = "[data-" + HzNavbarComponent_1.PREFIX + "-exit-dialog]";
+    HzNavbarComponent.QUERY_PAGE_CURRENT = "[data-" + HzNavbarComponent_1.PREFIX + "-current]";
+    HzNavbarComponent.QUERY_PAGE_TOTAL = "[data-" + HzNavbarComponent_1.PREFIX + "-total]";
+    HzNavbarComponent.QUERY_INDEX_LIST = "[data-" + HzNavbarComponent_1.PREFIX + "-index-list]";
+    HzNavbarComponent.QUERY_INDEX_LIST_ITEM = "[data-" + HzNavbarComponent_1.PREFIX + "-index-list-item]";
+    HzNavbarComponent.QUERY_INDEX_LIST_ITEM_CONTENT = "[data-" + HzNavbarComponent_1.PREFIX + "-index-list-item-content]";
+    HzNavbarComponent.CLASS_PAGE_VISITED = "hz-navbar__page--visited";
+    HzNavbarComponent.CLASS_PAGE_COMPLETED = "hz-navbar__page--completed";
+    HzNavbarComponent.CLASS_LIST_INDEX_DIALOG = "hz-navbar__dialog hz-navbar__index-list-dialog";
+    HzNavbarComponent.CLASS_LIST_EXIT_DIALOG = "hz-navbar__dialog hz-navbar__index-list-dialog";
+    HzNavbarComponent.DATA_PAGE = "hzNavbarPage";
+    HzNavbarComponent.OPT_DIALOG_DEFAULTS = {
+        autoOpen: false,
+        show: "fade",
+        hide: "fade"
+    };
+    HzNavbarComponent._DEFAULTS = {
+        locale: {
+            "es": {
+                next: "Siguiente",
+                prev: "Anterior",
+                currentPage: "Página actual",
+                totalPages: "Páginas totales",
+                home: "Ir al inicio",
+                showIndex: "Mostrar índice",
+                index: "Índice",
+                exit: "Salir",
+                exitTitle: "Salir",
+                exitMessage: "Va a salir del curso. ¿Desea guardar la puntuación y salir?",
+                exitOk: "Salir",
+                exitKo: "Cancelar"
+            }
+        },
+        defaultLang: "es"
+    };
+    HzNavbarComponent = HzNavbarComponent_1 = __decorate([
+        core_1.Component({
+            name: "HzNavbar",
+            dependencies: [
+                core_1.$,
+                core_1.EventEmitterFactory,
+                core_1.Navigator,
+                core_1.PageManager,
+                core_1.DataOptions
+            ]
+        })
+    ], HzNavbarComponent);
     return HzNavbarComponent;
+    var HzNavbarComponent_1;
 }(core_1.ComponentController));
-HzNavbarComponent.NAMESPACE = "hzNavbar";
-HzNavbarComponent.PREFIX = "hz-navbar";
-HzNavbarComponent.PREFIX_LIST_DIALOG_OPTIONS = HzNavbarComponent_1.NAMESPACE + "Dialog";
-HzNavbarComponent.QUERY_ACTION_NEXT = "[data-" + HzNavbarComponent_1.PREFIX + "-next]";
-HzNavbarComponent.QUERY_ACTION_PREV = "[data-" + HzNavbarComponent_1.PREFIX + "-prev]";
-HzNavbarComponent.QUERY_BAR = "[data-" + HzNavbarComponent_1.PREFIX + "-bar]";
-HzNavbarComponent.QUERY_PROGRESS = "[data-" + HzNavbarComponent_1.PREFIX + "-progress]";
-HzNavbarComponent.QUERY_ACTION_HOME = "[data-" + HzNavbarComponent_1.PREFIX + "-home]";
-HzNavbarComponent.QUERY_ACTION_INDEX = "[data-" + HzNavbarComponent_1.PREFIX + "-index]";
-HzNavbarComponent.QUERY_PAGE_CURRENT = "[data-" + HzNavbarComponent_1.PREFIX + "-current]";
-HzNavbarComponent.QUERY_PAGE_TOTAL = "[data-" + HzNavbarComponent_1.PREFIX + "-total]";
-HzNavbarComponent.QUERY_INDEX_LIST = "[data-" + HzNavbarComponent_1.PREFIX + "-index-list]";
-HzNavbarComponent.QUERY_INDEX_LIST_ITEM = "[data-" + HzNavbarComponent_1.PREFIX + "-index-list-item]";
-HzNavbarComponent.QUERY_INDEX_LIST_ITEM_CONTENT = "[data-" + HzNavbarComponent_1.PREFIX + "-index-list-item-content]";
-HzNavbarComponent.CLASS_PAGE_VISITED = "hz-navbar__page--visited";
-HzNavbarComponent.CLASS_PAGE_COMPLETED = "hz-navbar__page--completed";
-HzNavbarComponent.CLASS_LIST_INDEX_DIALOG = "hz-navbar__index-list-dialog";
-HzNavbarComponent.DATA_PAGE = "hzNavbarPage";
-HzNavbarComponent.OPT_DIALOG_DEFAULTS = {
-    autoOpen: false
-};
-HzNavbarComponent._DEFAULTS = {
-    locale: {
-        "es": {
-            next: "Siguiente",
-            prev: "Anterior",
-            currentPage: "Página actual",
-            totalPages: "Páginas totales",
-            home: "Ir al inicio",
-            showIndex: "Mostrar índice",
-            index: "Índice"
-        }
-    },
-    defaultLang: "es"
-};
-HzNavbarComponent = HzNavbarComponent_1 = __decorate([
-    core_1.Component({
-        name: "HzNavbar",
-        dependencies: [
-            core_1.$,
-            core_1.EventEmitterFactory,
-            core_1.Navigator,
-            core_1.PageManager,
-            core_1.DataOptions
-        ]
-    })
-], HzNavbarComponent);
 exports.HzNavbarComponent = HzNavbarComponent;
-var HzNavbarComponent_1;
 //# sourceMappingURL=HzNavbarComponent.js.map
 });
 return ___scope___.entry = "dist/HzNavbar.js";
@@ -36466,10 +36718,10 @@ FuseBox.pkg("howler", {}, function(___scope___){
 ___scope___.file("dist/howler.js", function(exports, require, module, __filename, __dirname){
 
 /*!
- *  howler.js v2.0.5
+ *  howler.js v2.0.9
  *  howlerjs.com
  *
- *  (c) 2013-2017, James Simpson of GoldFire Studios
+ *  (c) 2013-2018, James Simpson of GoldFire Studios
  *  goldfirestudios.com
  *
  *  MIT License
@@ -36548,7 +36800,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
         // When using Web Audio, we just need to adjust the master gain.
         if (self.usingWebAudio) {
-          self.masterGain.gain.value = vol;
+          self.masterGain.gain.setValueAtTime(vol, Howler.ctx.currentTime);
         }
 
         // Loop through and change volume for all HTML5 audio nodes.
@@ -36590,7 +36842,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
       // With Web Audio, we just need to mute the master gain.
       if (self.usingWebAudio) {
-        self.masterGain.gain.value = muted ? 0 : self._volume;
+        self.masterGain.gain.setValueAtTime(muted ? 0 : self._volume, Howler.ctx.currentTime);
       }
 
       // Loop through and mute all HTML5 Audio nodes.
@@ -36950,6 +37202,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       self._sounds = [];
       self._endTimers = {};
       self._queue = [];
+      self._playLock = false;
 
       // Setup event listeners.
       self._onend = o.onend ? [{fn: o.onend}] : [];
@@ -37155,9 +37408,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       if (id && !sound._paused) {
         // Trigger the play event, in order to keep iterating through queue.
         if (!internal) {
-          setTimeout(function() {
-            self._emit('play', sound._id);
-          }, 0);
+          self._loadQueue('play');
         }
 
         return sound._id;
@@ -37231,7 +37482,24 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
           // Mobile browsers will throw an error if this is called without user interaction.
           try {
-            node.play();
+            var play = node.play();
+
+            // Support older browsers that don't support promises, and thus don't have this issue.
+            if (typeof Promise !== 'undefined' && play instanceof Promise) {
+              // Implements a lock to prevent DOMException: The play() request was interrupted by a call to pause().
+              self._playLock = true;
+
+              // Releases the lock and executes queued actions.
+              var runLoadQueue = function() {
+                self._playLock = false;
+                if (!internal) {
+                  self._emit('play', sound._id);
+                }
+              };
+              play.then(runLoadQueue, runLoadQueue);
+            } else if (!internal) {
+              self._emit('play', sound._id);
+            }
 
             // If the node is still paused, then we can assume there was a playback issue.
             if (node.paused) {
@@ -37240,13 +37508,18 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
               return;
             }
 
-            // Setup the new end timer.
-            if (timeout !== Infinity) {
+            // Setup the end timer on sprites or listen for the ended event.
+            if (sprite !== '__default') {
               self._endTimers[sound._id] = setTimeout(self._ended.bind(self, sound), timeout);
-            }
+            } else {
+              self._endTimers[sound._id] = function() {
+                // Fire ended on this audio node.
+                self._ended(sound);
 
-            if (!internal) {
-              self._emit('play', sound._id);
+                // Clear this listener.
+                node.removeEventListener('ended', self._endTimers[sound._id], false);
+              };
+              node.addEventListener('ended', self._endTimers[sound._id], false);
             }
           } catch (err) {
             self._emit('playerror', sound._id, err);
@@ -37255,7 +37528,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
         // Play immediately if ready, or wait for the 'canplaythrough'e vent.
         var loadedNoReadyState = (window && window.ejecta) || (!node.readyState && Howler._navigator.isCocoonJS);
-        if (node.readyState === 4 || loadedNoReadyState) {
+        if (node.readyState >= 3 || loadedNoReadyState) {
           playHtml5();
         } else {
           var listener = function() {
@@ -37283,8 +37556,8 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
     pause: function(id) {
       var self = this;
 
-      // If the sound hasn't loaded, add it to the load queue to pause when capable.
-      if (self._state !== 'loaded') {
+      // If the sound hasn't loaded or a play() promise is pending, add it to the load queue to pause when capable.
+      if (self._state !== 'loaded' || self._playLock) {
         self._queue.push({
           event: 'pause',
           action: function() {
@@ -37453,6 +37726,11 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
         if (sound) {
           sound._muted = muted;
 
+          // Cancel active fade and set the volume to the end value.
+          if (sound._interval) {
+            self._stopFade(sound._id);
+          }
+
           if (self._webAudio && sound._node) {
             sound._node.gain.setValueAtTime(muted ? 0 : sound._volume, Howler.ctx.currentTime);
           } else if (sound._node) {
@@ -37596,7 +37874,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
             sound._node.gain.linearRampToValueAtTime(to, end);
           }
 
-          self._startFadeInterval(sound, from, to, len, ids[i]);
+          self._startFadeInterval(sound, from, to, len, ids[i], typeof id === 'undefined');
         }
       }
 
@@ -37610,26 +37888,25 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
      * @param  {Number} to   The volume to fade to (0.0 to 1.0).
      * @param  {Number} len  Time in milliseconds to fade.
      * @param  {Number} id   The sound id to fade.
+     * @param  {Boolean} isGroup   If true, set the volume on the group.
      */
-    _startFadeInterval: function(sound, from, to, len, id) {
+    _startFadeInterval: function(sound, from, to, len, id, isGroup) {
       var self = this;
       var vol = from;
-      var dir = from > to ? 'out' : 'in';
-      var diff = Math.abs(from - to);
-      var steps = diff / 0.01;
-      var stepLen = (steps > 0) ? len / steps : len;
+      var diff = to - from;
+      var steps = Math.abs(diff / 0.01);
+      var stepLen = Math.max(4, (steps > 0) ? len / steps : len);
+      var lastTick = Date.now();
 
-      // Since browsers clamp timeouts to 4ms, we need to clamp our steps to that too.
-      if (stepLen < 4) {
-        steps = Math.ceil(steps / (4 / stepLen));
-        stepLen = 4;
-      }
+      // Store the value being faded to.
+      sound._fadeTo = to;
 
+      // Update the volume value on each interval tick.
       sound._interval = setInterval(function() {
-        // Update the volume amount, but only if the volume should change.
-        if (steps > 0) {
-          vol += (dir === 'in' ? 0.01 : -0.01);
-        }
+        // Update the volume based on the time since the last tick.
+        var tick = (Date.now() - lastTick) / len;
+        lastTick = Date.now();
+        vol += diff * tick;
 
         // Make sure the volume is in the right bounds.
         vol = Math.max(0, vol);
@@ -37640,19 +37917,21 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
         // Change the volume.
         if (self._webAudio) {
-          if (typeof id === 'undefined') {
-            self._volume = vol;
-          }
-
           sound._volume = vol;
         } else {
           self.volume(vol, sound._id, true);
+        }
+
+        // Set the group's volume.
+        if (isGroup) {
+          self._volume = vol;
         }
 
         // When the fade is complete, stop it and fire event.
         if ((to < from && vol <= to) || (to > from && vol >= to)) {
           clearInterval(sound._interval);
           sound._interval = null;
+          sound._fadeTo = null;
           self.volume(to, sound._id);
           self._emit('fade', sound._id);
         }
@@ -37676,6 +37955,8 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
         clearInterval(sound._interval);
         sound._interval = null;
+        self.volume(sound._fadeTo, id);
+        sound._fadeTo = null;
         self._emit('fade', id);
       }
 
@@ -37799,7 +38080,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
             // Change the playback rate.
             if (self._webAudio && sound._node && sound._node.bufferSource) {
-              sound._node.bufferSource.playbackRate.value = rate;
+              sound._node.bufferSource.playbackRate.setValueAtTime(rate, Howler.ctx.currentTime);
             } else if (sound._node) {
               sound._node.playbackRate = rate;
             }
@@ -37901,7 +38182,19 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
             sound._node.currentTime = seek;
           }
 
-          self._emit('seek', id);
+          // Wait for the play lock to be unset before emitting (HTML5 Audio).
+          if (playing && !self._webAudio) {
+            var emitSeek = function() {
+              if (!self._playLock) {
+                self._emit('seek', id);
+              } else {
+                setTimeout(emitSeek, 0);
+              }
+            };
+            setTimeout(emitSeek, 0);
+          } else {
+            self._emit('seek', id);
+          }
         } else {
           if (self._webAudio) {
             var realTime = self.playing(id) ? Howler.ctx.currentTime - sound._playStart : 0;
@@ -38122,6 +38415,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
       // Loop through event store and fire all functions.
       for (var i=events.length-1; i>=0; i--) {
+        // Only fire the listener if the correct ID is used.
         if (!events[i].id || events[i].id === id || event === 'load') {
           setTimeout(function(fn) {
             fn.call(this, id, msg);
@@ -38134,6 +38428,9 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
         }
       }
 
+      // Pass the event type into load queue so that it can continue stepping.
+      self._loadQueue(event);
+
       return self;
     },
 
@@ -38143,19 +38440,22 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
      * after the previous has finished executing (even if async like play).
      * @return {Howl}
      */
-    _loadQueue: function() {
+    _loadQueue: function(event) {
       var self = this;
 
       if (self._queue.length > 0) {
         var task = self._queue[0];
 
-        // don't move onto the next task until this one is done
-        self.once(task.event, function() {
+        // Remove this task if a matching event was passed.
+        if (task.event === event) {
           self._queue.shift();
           self._loadQueue();
-        });
+        }
 
-        task.action();
+        // Run the task if no event type is passed.
+        if (!event) {
+          task.action();
+        }
       }
 
       return self;
@@ -38173,7 +38473,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       // If we are using IE and there was network latency we may be clipping
       // audio before it completes playing. Lets check the node to make sure it
       // believes it has completed, before ending the playback.
-      if (!self._webAudio && sound._node && !sound._node.paused) {
+      if (!self._webAudio && sound._node && !sound._node.paused && !sound._node.ended && sound._node.currentTime < sound._stop) {
         setTimeout(self._ended.bind(self, sound), 100);
         return self;
       }
@@ -38232,7 +38532,16 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       var self = this;
 
       if (self._endTimers[id]) {
-        clearTimeout(self._endTimers[id]);
+        // Clear the timeout or remove the ended listener.
+        if (typeof self._endTimers[id] !== 'function') {
+          clearTimeout(self._endTimers[id]);
+        } else {
+          var sound = self._soundById(id);
+          if (sound && sound._node) {
+            sound._node.removeEventListener('ended', self._endTimers[id], false);
+          }
+        }
+
         delete self._endTimers[id];
       }
 
@@ -38362,7 +38671,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
         sound._node.bufferSource.loopStart = sound._start || 0;
         sound._node.bufferSource.loopEnd = sound._stop;
       }
-      sound._node.bufferSource.playbackRate.value = sound._rate;
+      sound._node.bufferSource.playbackRate.setValueAtTime(sound._rate, Howler.ctx.currentTime);
 
       return self;
     },
@@ -38375,10 +38684,10 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
     _cleanBuffer: function(node) {
       var self = this;
 
-      if (self._scratchBuffer) {
+      if (Howler._scratchBuffer) {
         node.bufferSource.onended = null;
         node.bufferSource.disconnect(0);
-        try { node.bufferSource.buffer = self._scratchBuffer; } catch(e) {}
+        try { node.bufferSource.buffer = Howler._scratchBuffer; } catch(e) {}
       }
       node.bufferSource = null;
 
@@ -38677,7 +38986,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
     // Create and expose the master GainNode when using Web Audio (useful for plugins or advanced usage).
     if (Howler.usingWebAudio) {
       Howler.masterGain = (typeof Howler.ctx.createGain === 'undefined') ? Howler.ctx.createGainNode() : Howler.ctx.createGain();
-      Howler.masterGain.gain.value = Howler._muted ? 0 : 1;
+      Howler.masterGain.gain.setValueAtTime(Howler._muted ? 0 : 1, Howler.ctx.currentTime);
       Howler.masterGain.connect(Howler.ctx.destination);
     }
 
@@ -38719,10 +39028,10 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 /*!
  *  Spatial Plugin - Adds support for stereo and 3D audio where Web Audio is supported.
  *  
- *  howler.js v2.0.5
+ *  howler.js v2.0.9
  *  howlerjs.com
  *
- *  (c) 2013-2017, James Simpson of GoldFire Studios
+ *  (c) 2013-2018, James Simpson of GoldFire Studios
  *  goldfirestudios.com
  *
  *  MIT License
@@ -38931,7 +39240,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
             if (pannerType === 'spatial') {
               sound._panner.setPosition(pan, 0, 0);
             } else {
-              sound._panner.pan.value = pan;
+              sound._panner.pan.setValueAtTime(pan, Howler.ctx.currentTime);
             }
           }
 
@@ -39300,14 +39609,14 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       sound._panner.setOrientation(sound._orientation[0], sound._orientation[1], sound._orientation[2]);
     } else {
       sound._panner = Howler.ctx.createStereoPanner();
-      sound._panner.pan.value = sound._stereo;
+      sound._panner.pan.setValueAtTime(sound._stereo, Howler.ctx.currentTime);
     }
 
     sound._panner.connect(sound._node);
 
     // Update the connections.
     if (!sound._paused) {
-      sound._parent.pause(sound._id, true).play(sound._id);
+      sound._parent.pause(sound._id, true).play(sound._id, true);
     }
   };
 })();
@@ -39370,11 +39679,14 @@ velocityui;
  * @requires EventEmitterFactory
  * @extends ResourceController
  */
-var HzAnimResource = HzAnimResource_1 = (function (_super) {
+var HzAnimResource = /** @class */ (function (_super) {
     __extends(HzAnimResource, _super);
     function HzAnimResource() {
-        return _super !== null && _super.apply(this, arguments) || this;
+        var _this = _super !== null && _super.apply(this, arguments) || this;
+        _this.running = false;
+        return _this;
     }
+    HzAnimResource_1 = HzAnimResource;
     /**
      * @description Inicializa el objeto al inyectarse
      * @param {any}     options     Opciones
@@ -39384,9 +39696,8 @@ var HzAnimResource = HzAnimResource_1 = (function (_super) {
     HzAnimResource.prototype.init = function (options, config) {
         this._id = new Date().getTime();
         this._namespace = HzAnimResource_1.NAMESPACE + this._id;
-        this._options = options;
+        this._options = this._$.extend(true, {}, HzAnimResource_1._DEFAULT_OPTIONS, options);
         this._options.to = this._options.to || this._$element;
-        this._options.with = this._$.extend(true, {}, HzAnimResource_1._DEFAULT_OPTIONS, this._options.with);
         this._config = config;
         this._assignEvents();
     };
@@ -39407,6 +39718,7 @@ var HzAnimResource = HzAnimResource_1 = (function (_super) {
         }
         else {
             this._markAsCompleted();
+            this.running = false;
         }
     };
     HzAnimResource.prototype._runSequenceStep = function (stepIndex, sequence) {
@@ -39414,7 +39726,7 @@ var HzAnimResource = HzAnimResource_1 = (function (_super) {
         if (step) {
             var config = step.getConfig();
             step.run().then(this._onSequenceStepCompleted.bind(this, stepIndex + 1, sequence));
-            if (config.withConfig && config.withConfig.loop) {
+            if (config.withConfig && config.withConfig.loop === true) {
                 this._markAsCompleted();
             }
         }
@@ -39423,8 +39735,9 @@ var HzAnimResource = HzAnimResource_1 = (function (_super) {
         this._runSequenceStep(0, sequence);
     };
     HzAnimResource.prototype.run = function () {
-        if (!this.isDisabled()) {
+        if (!this.isDisabled() && !this.running && (this.isCompleted() == false || this._options.repeatable)) {
             if (this._options.to) {
+                this.running = true;
                 var sequence = [this._sequenceFactory(this._options.to, this._options.do, this._options.with)];
                 var next = true, index = 1;
                 do {
@@ -39455,9 +39768,6 @@ var HzAnimResource = HzAnimResource_1 = (function (_super) {
         this._$element.off("." + HzAnimResource_1.NAMESPACE);
         this._$element.on(this._options.on + "." + this._namespace, { instance: this }, this._onEventTriggered);
         this._eventEmitter.on(core_1.ResourceSequence.ON_RESOURCE_STATE_CHANGE + "." + HzAnimResource_1.NAMESPACE, { instance: this }, this._onSequenceStateChange);
-    };
-    HzAnimResource.prototype._onEnd = function () {
-        this._markAsCompleted();
     };
     HzAnimResource.prototype._onError = function () {
     };
@@ -39497,23 +39807,26 @@ var HzAnimResource = HzAnimResource_1 = (function (_super) {
     HzAnimResource.prototype.getInstance = function () {
         return this;
     };
+    HzAnimResource.NAMESPACE = "hzAnim";
+    HzAnimResource._DEFAULT_OPTIONS = {
+        repeatable: true,
+        with: {
+            duration: 500
+        }
+    };
+    HzAnimResource = HzAnimResource_1 = __decorate([
+        core_1.Resource({
+            name: "HzAnim",
+            dependencies: [
+                core_1.$,
+                core_1.EventEmitterFactory
+            ]
+        })
+    ], HzAnimResource);
     return HzAnimResource;
+    var HzAnimResource_1;
 }(core_1.ResourceController));
-HzAnimResource.NAMESPACE = "hzAnim";
-HzAnimResource._DEFAULT_OPTIONS = {
-    duration: 500
-};
-HzAnimResource = HzAnimResource_1 = __decorate([
-    core_1.Resource({
-        name: "HzAnim",
-        dependencies: [
-            core_1.$,
-            core_1.EventEmitterFactory
-        ]
-    })
-], HzAnimResource);
 exports.HzAnimResource = HzAnimResource;
-var HzAnimResource_1;
 //# sourceMappingURL=HzAnimResource.js.map
 });
 ___scope___.file("dist/HzAnimSequence.js", function(exports, require, module, __filename, __dirname){
@@ -39526,7 +39839,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
  */
 require("velocity-animate");
 require("velocity-animate/velocity.ui");
-var HzAnimSequence = (function () {
+var HzAnimSequence = /** @class */ (function () {
     function HzAnimSequence(_$) {
         this._$ = _$;
         this._complete = false;
@@ -39609,7 +39922,7 @@ var HzAnimSequence = (function () {
         return this._deferred.promise();
     };
     HzAnimSequence.prototype.getConfig = function () {
-        return this._config;
+        return this._stepConfig;
     };
     return HzAnimSequence;
 }());
@@ -39985,7 +40298,7 @@ ___scope___.file("velocity.js", function(exports, require, module, __filename, _
 			function offsetParentFn(elem) {
 				var offsetParent = elem.offsetParent;
 
-				while (offsetParent && offsetParent.nodeName.toLowerCase() !== "html" && offsetParent.style && offsetParent.style.position === "static") {
+				while (offsetParent && (offsetParent.nodeName.toLowerCase() !== "html" && offsetParent.style && offsetParent.style.position.toLowerCase() === "static")) {
 					offsetParent = offsetParent.offsetParent;
 				}
 
@@ -40325,12 +40638,12 @@ ___scope___.file("velocity.js", function(exports, require, module, __filename, _
 			/* Container for page-wide Velocity state data. */
 			State: {
 				/* Detect mobile devices to determine if mobileHA should be turned on. */
-				isMobile: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+				isMobile: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(window.navigator.userAgent),
 				/* The mobileHA option's behavior changes on older Android devices (Gingerbread, versions 2.3.3-2.3.7). */
-				isAndroid: /Android/i.test(navigator.userAgent),
-				isGingerbread: /Android 2\.3\.[3-7]/i.test(navigator.userAgent),
+				isAndroid: /Android/i.test(window.navigator.userAgent),
+				isGingerbread: /Android 2\.3\.[3-7]/i.test(window.navigator.userAgent),
 				isChrome: window.chrome,
-				isFirefox: /Firefox/i.test(navigator.userAgent),
+				isFirefox: /Firefox/i.test(window.navigator.userAgent),
 				/* Create a cached element for re-use when checking for CSS property prefixes. */
 				prefixElement: document.createElement("div"),
 				/* Cache every prefix match to avoid repeating lookups. */
@@ -40400,7 +40713,7 @@ ___scope___.file("velocity.js", function(exports, require, module, __filename, _
 			hook: null, /* Defined below. */
 			/* Velocity-wide animation time remapping for testing purposes. */
 			mock: false,
-			version: {major: 1, minor: 5, patch: 0},
+			version: {major: 1, minor: 5, patch: 1},
 			/* Set to 1 or 2 (most verbose) to output debug info to console. */
 			debug: false,
 			/* Use rAF high resolution timestamp when available */
@@ -42627,7 +42940,12 @@ ___scope___.file("velocity.js", function(exports, require, module, __filename, _
 				/* Note: Velocity rolls its own delay function since jQuery doesn't have a utility alias for $.fn.delay()
 				 (and thus requires jQuery element creation, which we avoid since its overhead includes DOM querying). */
 				if (parseFloat(opts.delay) && opts.queue !== false) {
-					$.queue(element, opts.queue, function(next) {
+					$.queue(element, opts.queue, function(next, clearQueue) {
+						if (clearQueue === true) {
+							/* Do not continue with animation queueing. */
+							return true;
+						}
+
 						/* This is a flag used to indicate to the upcoming completeCall() function that this queue entry was initiated by Velocity. See completeCall() for further details. */
 						Velocity.velocityQueueEntryFlag = true;
 
@@ -43840,7 +44158,7 @@ ___scope___.file("velocity.js", function(exports, require, module, __filename, _
 							call = callContainer[0],
 							opts = callContainer[2],
 							timeStart = callContainer[3],
-							firstTick = !!timeStart,
+							firstTick = !timeStart,
 							tweenDummyValue = null,
 							pauseObject = callContainer[5],
 							millisecondsEllapsed = callContainer[6];
