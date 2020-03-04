@@ -1,6 +1,6 @@
 (function(FuseBox){FuseBox.$fuse$=FuseBox;
 /*!
- * jQuery JavaScript Library v3.3.1
+ * jQuery JavaScript Library v3.4.1
  * https://jquery.com/
  *
  * Includes Sizzle.js
@@ -10,7 +10,7 @@
  * Released under the MIT license
  * https://jquery.org/license
  *
- * Date: 2018-01-20T17:24Z
+ * Date: 2019-05-01T21:04Z
  */
 ( function( global, factory ) {
 
@@ -92,20 +92,33 @@ var isWindow = function isWindow( obj ) {
 	var preservedScriptAttributes = {
 		type: true,
 		src: true,
+		nonce: true,
 		noModule: true
 	};
 
-	function DOMEval( code, doc, node ) {
+	function DOMEval( code, node, doc ) {
 		doc = doc || document;
 
-		var i,
+		var i, val,
 			script = doc.createElement( "script" );
 
 		script.text = code;
 		if ( node ) {
 			for ( i in preservedScriptAttributes ) {
-				if ( node[ i ] ) {
-					script[ i ] = node[ i ];
+
+				// Support: Firefox 64+, Edge 18+
+				// Some browsers don't support the "nonce" property on scripts.
+				// On the other hand, just using `getAttribute` is not enough as
+				// the `nonce` attribute is reset to an empty string whenever it
+				// becomes browsing-context connected.
+				// See https://github.com/whatwg/html/issues/2369
+				// See https://html.spec.whatwg.org/#nonce-attributes
+				// The `node.getAttribute` check was added for the sake of
+				// `jQuery.globalEval` so that it can fake a nonce-containing node
+				// via an object.
+				val = node[ i ] || node.getAttribute && node.getAttribute( i );
+				if ( val ) {
+					script.setAttribute( i, val );
 				}
 			}
 		}
@@ -130,7 +143,7 @@ function toType( obj ) {
 
 
 var
-	version = "3.3.1",
+	version = "3.4.1",
 
 	// Define a local copy of jQuery
 	jQuery = function( selector, context ) {
@@ -259,25 +272,28 @@ jQuery.extend = jQuery.fn.extend = function() {
 
 			// Extend the base object
 			for ( name in options ) {
-				src = target[ name ];
 				copy = options[ name ];
 
+				// Prevent Object.prototype pollution
 				// Prevent never-ending loop
-				if ( target === copy ) {
+				if ( name === "__proto__" || target === copy ) {
 					continue;
 				}
 
 				// Recurse if we're merging plain objects or arrays
 				if ( deep && copy && ( jQuery.isPlainObject( copy ) ||
 					( copyIsArray = Array.isArray( copy ) ) ) ) {
+					src = target[ name ];
 
-					if ( copyIsArray ) {
-						copyIsArray = false;
-						clone = src && Array.isArray( src ) ? src : [];
-
+					// Ensure proper type for the source value
+					if ( copyIsArray && !Array.isArray( src ) ) {
+						clone = [];
+					} else if ( !copyIsArray && !jQuery.isPlainObject( src ) ) {
+						clone = {};
 					} else {
-						clone = src && jQuery.isPlainObject( src ) ? src : {};
+						clone = src;
 					}
+					copyIsArray = false;
 
 					// Never move original objects, clone them
 					target[ name ] = jQuery.extend( deep, clone, copy );
@@ -330,9 +346,6 @@ jQuery.extend( {
 	},
 
 	isEmptyObject: function( obj ) {
-
-		/* eslint-disable no-unused-vars */
-		// See https://github.com/eslint/eslint/issues/6125
 		var name;
 
 		for ( name in obj ) {
@@ -342,8 +355,8 @@ jQuery.extend( {
 	},
 
 	// Evaluates a script in a global context
-	globalEval: function( code ) {
-		DOMEval( code );
+	globalEval: function( code, options ) {
+		DOMEval( code, { nonce: options && options.nonce } );
 	},
 
 	each: function( obj, callback ) {
@@ -499,14 +512,14 @@ function isArrayLike( obj ) {
 }
 var Sizzle =
 /*!
- * Sizzle CSS Selector Engine v2.3.3
+ * Sizzle CSS Selector Engine v2.3.4
  * https://sizzlejs.com/
  *
- * Copyright jQuery Foundation and other contributors
+ * Copyright JS Foundation and other contributors
  * Released under the MIT license
- * http://jquery.org/license
+ * https://js.foundation/
  *
- * Date: 2016-08-08
+ * Date: 2019-04-08
  */
 (function( window ) {
 
@@ -540,6 +553,7 @@ var i,
 	classCache = createCache(),
 	tokenCache = createCache(),
 	compilerCache = createCache(),
+	nonnativeSelectorCache = createCache(),
 	sortOrder = function( a, b ) {
 		if ( a === b ) {
 			hasDuplicate = true;
@@ -601,8 +615,7 @@ var i,
 
 	rcomma = new RegExp( "^" + whitespace + "*," + whitespace + "*" ),
 	rcombinators = new RegExp( "^" + whitespace + "*([>+~]|" + whitespace + ")" + whitespace + "*" ),
-
-	rattributeQuotes = new RegExp( "=" + whitespace + "*([^\\]'\"]*?)" + whitespace + "*\\]", "g" ),
+	rdescend = new RegExp( whitespace + "|>" ),
 
 	rpseudo = new RegExp( pseudos ),
 	ridentifier = new RegExp( "^" + identifier + "$" ),
@@ -623,6 +636,7 @@ var i,
 			whitespace + "*((?:-\\d)?\\d*)" + whitespace + "*\\)|)(?=[^-]|$)", "i" )
 	},
 
+	rhtml = /HTML$/i,
 	rinputs = /^(?:input|select|textarea|button)$/i,
 	rheader = /^h\d$/i,
 
@@ -677,9 +691,9 @@ var i,
 		setDocument();
 	},
 
-	disabledAncestor = addCombinator(
+	inDisabledFieldset = addCombinator(
 		function( elem ) {
-			return elem.disabled === true && ("form" in elem || "label" in elem);
+			return elem.disabled === true && elem.nodeName.toLowerCase() === "fieldset";
 		},
 		{ dir: "parentNode", next: "legend" }
 	);
@@ -792,18 +806,22 @@ function Sizzle( selector, context, results, seed ) {
 
 			// Take advantage of querySelectorAll
 			if ( support.qsa &&
-				!compilerCache[ selector + " " ] &&
-				(!rbuggyQSA || !rbuggyQSA.test( selector )) ) {
+				!nonnativeSelectorCache[ selector + " " ] &&
+				(!rbuggyQSA || !rbuggyQSA.test( selector )) &&
 
-				if ( nodeType !== 1 ) {
-					newContext = context;
-					newSelector = selector;
-
-				// qSA looks outside Element context, which is not what we want
-				// Thanks to Andrew Dupont for this workaround technique
-				// Support: IE <=8
+				// Support: IE 8 only
 				// Exclude object elements
-				} else if ( context.nodeName.toLowerCase() !== "object" ) {
+				(nodeType !== 1 || context.nodeName.toLowerCase() !== "object") ) {
+
+				newSelector = selector;
+				newContext = context;
+
+				// qSA considers elements outside a scoping root when evaluating child or
+				// descendant combinators, which is not what we want.
+				// In such cases, we work around the behavior by prefixing every selector in the
+				// list with an ID selector referencing the scope context.
+				// Thanks to Andrew Dupont for this technique.
+				if ( nodeType === 1 && rdescend.test( selector ) ) {
 
 					// Capture the context ID, setting it first if necessary
 					if ( (nid = context.getAttribute( "id" )) ) {
@@ -825,17 +843,16 @@ function Sizzle( selector, context, results, seed ) {
 						context;
 				}
 
-				if ( newSelector ) {
-					try {
-						push.apply( results,
-							newContext.querySelectorAll( newSelector )
-						);
-						return results;
-					} catch ( qsaError ) {
-					} finally {
-						if ( nid === expando ) {
-							context.removeAttribute( "id" );
-						}
+				try {
+					push.apply( results,
+						newContext.querySelectorAll( newSelector )
+					);
+					return results;
+				} catch ( qsaError ) {
+					nonnativeSelectorCache( selector, true );
+				} finally {
+					if ( nid === expando ) {
+						context.removeAttribute( "id" );
 					}
 				}
 			}
@@ -999,7 +1016,7 @@ function createDisabledPseudo( disabled ) {
 					// Where there is no isDisabled, check manually
 					/* jshint -W018 */
 					elem.isDisabled !== !disabled &&
-						disabledAncestor( elem ) === disabled;
+						inDisabledFieldset( elem ) === disabled;
 			}
 
 			return elem.disabled === disabled;
@@ -1056,10 +1073,13 @@ support = Sizzle.support = {};
  * @returns {Boolean} True iff elem is a non-HTML XML node
  */
 isXML = Sizzle.isXML = function( elem ) {
-	// documentElement is verified for cases where it doesn't yet exist
-	// (such as loading iframes in IE - #4833)
-	var documentElement = elem && (elem.ownerDocument || elem).documentElement;
-	return documentElement ? documentElement.nodeName !== "HTML" : false;
+	var namespace = elem.namespaceURI,
+		docElem = (elem.ownerDocument || elem).documentElement;
+
+	// Support: IE <=8
+	// Assume HTML when documentElement doesn't yet exist, such as inside loading iframes
+	// https://bugs.jquery.com/ticket/4833
+	return !rhtml.test( namespace || docElem && docElem.nodeName || "HTML" );
 };
 
 /**
@@ -1481,11 +1501,8 @@ Sizzle.matchesSelector = function( elem, expr ) {
 		setDocument( elem );
 	}
 
-	// Make sure that attribute selectors are quoted
-	expr = expr.replace( rattributeQuotes, "='$1']" );
-
 	if ( support.matchesSelector && documentIsHTML &&
-		!compilerCache[ expr + " " ] &&
+		!nonnativeSelectorCache[ expr + " " ] &&
 		( !rbuggyMatches || !rbuggyMatches.test( expr ) ) &&
 		( !rbuggyQSA     || !rbuggyQSA.test( expr ) ) ) {
 
@@ -1499,7 +1516,9 @@ Sizzle.matchesSelector = function( elem, expr ) {
 					elem.document && elem.document.nodeType !== 11 ) {
 				return ret;
 			}
-		} catch (e) {}
+		} catch (e) {
+			nonnativeSelectorCache( expr, true );
+		}
 	}
 
 	return Sizzle( expr, document, null, [ elem ] ).length > 0;
@@ -1958,7 +1977,7 @@ Expr = Sizzle.selectors = {
 		"contains": markFunction(function( text ) {
 			text = text.replace( runescape, funescape );
 			return function( elem ) {
-				return ( elem.textContent || elem.innerText || getText( elem ) ).indexOf( text ) > -1;
+				return ( elem.textContent || getText( elem ) ).indexOf( text ) > -1;
 			};
 		}),
 
@@ -2097,7 +2116,11 @@ Expr = Sizzle.selectors = {
 		}),
 
 		"lt": createPositionalPseudo(function( matchIndexes, length, argument ) {
-			var i = argument < 0 ? argument + length : argument;
+			var i = argument < 0 ?
+				argument + length :
+				argument > length ?
+					length :
+					argument;
 			for ( ; --i >= 0; ) {
 				matchIndexes.push( i );
 			}
@@ -3147,18 +3170,18 @@ jQuery.each( {
 		return siblings( elem.firstChild );
 	},
 	contents: function( elem ) {
-        if ( nodeName( elem, "iframe" ) ) {
-            return elem.contentDocument;
-        }
+		if ( typeof elem.contentDocument !== "undefined" ) {
+			return elem.contentDocument;
+		}
 
-        // Support: IE 9 - 11 only, iOS 7 only, Android Browser <=4.3 only
-        // Treat the template element as a regular one in browsers that
-        // don't support it.
-        if ( nodeName( elem, "template" ) ) {
-            elem = elem.content || elem;
-        }
+		// Support: IE 9 - 11 only, iOS 7 only, Android Browser <=4.3 only
+		// Treat the template element as a regular one in browsers that
+		// don't support it.
+		if ( nodeName( elem, "template" ) ) {
+			elem = elem.content || elem;
+		}
 
-        return jQuery.merge( [], elem.childNodes );
+		return jQuery.merge( [], elem.childNodes );
 	}
 }, function( name, fn ) {
 	jQuery.fn[ name ] = function( until, selector ) {
@@ -4467,6 +4490,26 @@ var rcssNum = new RegExp( "^(?:([+-])=|)(" + pnum + ")([a-z%]*)$", "i" );
 
 var cssExpand = [ "Top", "Right", "Bottom", "Left" ];
 
+var documentElement = document.documentElement;
+
+
+
+	var isAttached = function( elem ) {
+			return jQuery.contains( elem.ownerDocument, elem );
+		},
+		composed = { composed: true };
+
+	// Support: IE 9 - 11+, Edge 12 - 18+, iOS 10.0 - 10.2 only
+	// Check attachment across shadow DOM boundaries when possible (gh-3504)
+	// Support: iOS 10.0-10.2 only
+	// Early iOS 10 versions support `attachShadow` but not `getRootNode`,
+	// leading to errors. We need to check for `getRootNode`.
+	if ( documentElement.getRootNode ) {
+		isAttached = function( elem ) {
+			return jQuery.contains( elem.ownerDocument, elem ) ||
+				elem.getRootNode( composed ) === elem.ownerDocument;
+		};
+	}
 var isHiddenWithinTree = function( elem, el ) {
 
 		// isHiddenWithinTree might be called from jQuery#filter function;
@@ -4481,7 +4524,7 @@ var isHiddenWithinTree = function( elem, el ) {
 			// Support: Firefox <=43 - 45
 			// Disconnected elements can have computed display: none, so first confirm that elem is
 			// in the document.
-			jQuery.contains( elem.ownerDocument, elem ) &&
+			isAttached( elem ) &&
 
 			jQuery.css( elem, "display" ) === "none";
 	};
@@ -4523,7 +4566,8 @@ function adjustCSS( elem, prop, valueParts, tween ) {
 		unit = valueParts && valueParts[ 3 ] || ( jQuery.cssNumber[ prop ] ? "" : "px" ),
 
 		// Starting value computation is required for potential unit mismatches
-		initialInUnit = ( jQuery.cssNumber[ prop ] || unit !== "px" && +initial ) &&
+		initialInUnit = elem.nodeType &&
+			( jQuery.cssNumber[ prop ] || unit !== "px" && +initial ) &&
 			rcssNum.exec( jQuery.css( elem, prop ) );
 
 	if ( initialInUnit && initialInUnit[ 3 ] !== unit ) {
@@ -4670,7 +4714,7 @@ jQuery.fn.extend( {
 } );
 var rcheckableType = ( /^(?:checkbox|radio)$/i );
 
-var rtagName = ( /<([a-z][^\/\0>\x20\t\r\n\f]+)/i );
+var rtagName = ( /<([a-z][^\/\0>\x20\t\r\n\f]*)/i );
 
 var rscriptType = ( /^$|^module$|\/(?:java|ecma)script/i );
 
@@ -4742,7 +4786,7 @@ function setGlobalEval( elems, refElements ) {
 var rhtml = /<|&#?\w+;/;
 
 function buildFragment( elems, context, scripts, selection, ignored ) {
-	var elem, tmp, tag, wrap, contains, j,
+	var elem, tmp, tag, wrap, attached, j,
 		fragment = context.createDocumentFragment(),
 		nodes = [],
 		i = 0,
@@ -4806,13 +4850,13 @@ function buildFragment( elems, context, scripts, selection, ignored ) {
 			continue;
 		}
 
-		contains = jQuery.contains( elem.ownerDocument, elem );
+		attached = isAttached( elem );
 
 		// Append to fragment
 		tmp = getAll( fragment.appendChild( elem ), "script" );
 
 		// Preserve script evaluation history
-		if ( contains ) {
+		if ( attached ) {
 			setGlobalEval( tmp );
 		}
 
@@ -4855,8 +4899,6 @@ function buildFragment( elems, context, scripts, selection, ignored ) {
 	div.innerHTML = "<textarea>x</textarea>";
 	support.noCloneChecked = !!div.cloneNode( true ).lastChild.defaultValue;
 } )();
-var documentElement = document.documentElement;
-
 
 
 var
@@ -4872,8 +4914,19 @@ function returnFalse() {
 	return false;
 }
 
+// Support: IE <=9 - 11+
+// focus() and blur() are asynchronous, except when they are no-op.
+// So expect focus to be synchronous when the element is already active,
+// and blur to be synchronous when the element is not already active.
+// (focus and blur are always synchronous in other supported browsers,
+// this just defines when we can count on it).
+function expectSync( elem, type ) {
+	return ( elem === safeActiveElement() ) === ( type === "focus" );
+}
+
 // Support: IE <=9 only
-// See #13393 for more info
+// Accessing document.activeElement can throw unexpectedly
+// https://bugs.jquery.com/ticket/13393
 function safeActiveElement() {
 	try {
 		return document.activeElement;
@@ -5173,9 +5226,10 @@ jQuery.event = {
 			while ( ( handleObj = matched.handlers[ j++ ] ) &&
 				!event.isImmediatePropagationStopped() ) {
 
-				// Triggered event must either 1) have no namespace, or 2) have namespace(s)
-				// a subset or equal to those in the bound event (both can have no namespace).
-				if ( !event.rnamespace || event.rnamespace.test( handleObj.namespace ) ) {
+				// If the event is namespaced, then each handler is only invoked if it is
+				// specially universal or its namespaces are a superset of the event's.
+				if ( !event.rnamespace || handleObj.namespace === false ||
+					event.rnamespace.test( handleObj.namespace ) ) {
 
 					event.handleObj = handleObj;
 					event.data = handleObj.data;
@@ -5299,39 +5353,51 @@ jQuery.event = {
 			// Prevent triggered image.load events from bubbling to window.load
 			noBubble: true
 		},
-		focus: {
-
-			// Fire native event if possible so blur/focus sequence is correct
-			trigger: function() {
-				if ( this !== safeActiveElement() && this.focus ) {
-					this.focus();
-					return false;
-				}
-			},
-			delegateType: "focusin"
-		},
-		blur: {
-			trigger: function() {
-				if ( this === safeActiveElement() && this.blur ) {
-					this.blur();
-					return false;
-				}
-			},
-			delegateType: "focusout"
-		},
 		click: {
 
-			// For checkbox, fire native event so checked state will be right
-			trigger: function() {
-				if ( this.type === "checkbox" && this.click && nodeName( this, "input" ) ) {
-					this.click();
-					return false;
+			// Utilize native event to ensure correct state for checkable inputs
+			setup: function( data ) {
+
+				// For mutual compressibility with _default, replace `this` access with a local var.
+				// `|| data` is dead code meant only to preserve the variable through minification.
+				var el = this || data;
+
+				// Claim the first handler
+				if ( rcheckableType.test( el.type ) &&
+					el.click && nodeName( el, "input" ) ) {
+
+					// dataPriv.set( el, "click", ... )
+					leverageNative( el, "click", returnTrue );
 				}
+
+				// Return false to allow normal processing in the caller
+				return false;
+			},
+			trigger: function( data ) {
+
+				// For mutual compressibility with _default, replace `this` access with a local var.
+				// `|| data` is dead code meant only to preserve the variable through minification.
+				var el = this || data;
+
+				// Force setup before triggering a click
+				if ( rcheckableType.test( el.type ) &&
+					el.click && nodeName( el, "input" ) ) {
+
+					leverageNative( el, "click" );
+				}
+
+				// Return non-false to allow normal event-path propagation
+				return true;
 			},
 
-			// For cross-browser consistency, don't fire native .click() on links
+			// For cross-browser consistency, suppress native .click() on links
+			// Also prevent it if we're currently inside a leveraged native-event stack
 			_default: function( event ) {
-				return nodeName( event.target, "a" );
+				var target = event.target;
+				return rcheckableType.test( target.type ) &&
+					target.click && nodeName( target, "input" ) &&
+					dataPriv.get( target, "click" ) ||
+					nodeName( target, "a" );
 			}
 		},
 
@@ -5347,6 +5413,93 @@ jQuery.event = {
 		}
 	}
 };
+
+// Ensure the presence of an event listener that handles manually-triggered
+// synthetic events by interrupting progress until reinvoked in response to
+// *native* events that it fires directly, ensuring that state changes have
+// already occurred before other listeners are invoked.
+function leverageNative( el, type, expectSync ) {
+
+	// Missing expectSync indicates a trigger call, which must force setup through jQuery.event.add
+	if ( !expectSync ) {
+		if ( dataPriv.get( el, type ) === undefined ) {
+			jQuery.event.add( el, type, returnTrue );
+		}
+		return;
+	}
+
+	// Register the controller as a special universal handler for all event namespaces
+	dataPriv.set( el, type, false );
+	jQuery.event.add( el, type, {
+		namespace: false,
+		handler: function( event ) {
+			var notAsync, result,
+				saved = dataPriv.get( this, type );
+
+			if ( ( event.isTrigger & 1 ) && this[ type ] ) {
+
+				// Interrupt processing of the outer synthetic .trigger()ed event
+				// Saved data should be false in such cases, but might be a leftover capture object
+				// from an async native handler (gh-4350)
+				if ( !saved.length ) {
+
+					// Store arguments for use when handling the inner native event
+					// There will always be at least one argument (an event object), so this array
+					// will not be confused with a leftover capture object.
+					saved = slice.call( arguments );
+					dataPriv.set( this, type, saved );
+
+					// Trigger the native event and capture its result
+					// Support: IE <=9 - 11+
+					// focus() and blur() are asynchronous
+					notAsync = expectSync( this, type );
+					this[ type ]();
+					result = dataPriv.get( this, type );
+					if ( saved !== result || notAsync ) {
+						dataPriv.set( this, type, false );
+					} else {
+						result = {};
+					}
+					if ( saved !== result ) {
+
+						// Cancel the outer synthetic event
+						event.stopImmediatePropagation();
+						event.preventDefault();
+						return result.value;
+					}
+
+				// If this is an inner synthetic event for an event with a bubbling surrogate
+				// (focus or blur), assume that the surrogate already propagated from triggering the
+				// native event and prevent that from happening again here.
+				// This technically gets the ordering wrong w.r.t. to `.trigger()` (in which the
+				// bubbling surrogate propagates *after* the non-bubbling base), but that seems
+				// less bad than duplication.
+				} else if ( ( jQuery.event.special[ type ] || {} ).delegateType ) {
+					event.stopPropagation();
+				}
+
+			// If this is a native event triggered above, everything is now in order
+			// Fire an inner synthetic event with the original arguments
+			} else if ( saved.length ) {
+
+				// ...and capture the result
+				dataPriv.set( this, type, {
+					value: jQuery.event.trigger(
+
+						// Support: IE <=9 - 11+
+						// Extend with the prototype to reset the above stopImmediatePropagation()
+						jQuery.extend( saved[ 0 ], jQuery.Event.prototype ),
+						saved.slice( 1 ),
+						this
+					)
+				} );
+
+				// Abort handling of the native event
+				event.stopImmediatePropagation();
+			}
+		}
+	} );
+}
 
 jQuery.removeEvent = function( elem, type, handle ) {
 
@@ -5460,6 +5613,7 @@ jQuery.each( {
 	shiftKey: true,
 	view: true,
 	"char": true,
+	code: true,
 	charCode: true,
 	key: true,
 	keyCode: true,
@@ -5505,6 +5659,33 @@ jQuery.each( {
 		return event.which;
 	}
 }, jQuery.event.addProp );
+
+jQuery.each( { focus: "focusin", blur: "focusout" }, function( type, delegateType ) {
+	jQuery.event.special[ type ] = {
+
+		// Utilize native event if possible so blur/focus sequence is correct
+		setup: function() {
+
+			// Claim the first handler
+			// dataPriv.set( this, "focus", ... )
+			// dataPriv.set( this, "blur", ... )
+			leverageNative( this, type, expectSync );
+
+			// Return false to allow normal processing in the caller
+			return false;
+		},
+		trigger: function() {
+
+			// Force setup before trigger
+			leverageNative( this, type );
+
+			// Return non-false to allow normal event-path propagation
+			return true;
+		},
+
+		delegateType: delegateType
+	};
+} );
 
 // Create mouseenter/leave events using mouseover/out and event-time checks
 // so that event delegation works in jQuery.
@@ -5756,11 +5937,13 @@ function domManip( collection, args, callback, ignored ) {
 						if ( node.src && ( node.type || "" ).toLowerCase()  !== "module" ) {
 
 							// Optional AJAX dependency, but won't run scripts if not present
-							if ( jQuery._evalUrl ) {
-								jQuery._evalUrl( node.src );
+							if ( jQuery._evalUrl && !node.noModule ) {
+								jQuery._evalUrl( node.src, {
+									nonce: node.nonce || node.getAttribute( "nonce" )
+								} );
 							}
 						} else {
-							DOMEval( node.textContent.replace( rcleanScript, "" ), doc, node );
+							DOMEval( node.textContent.replace( rcleanScript, "" ), node, doc );
 						}
 					}
 				}
@@ -5782,7 +5965,7 @@ function remove( elem, selector, keepData ) {
 		}
 
 		if ( node.parentNode ) {
-			if ( keepData && jQuery.contains( node.ownerDocument, node ) ) {
+			if ( keepData && isAttached( node ) ) {
 				setGlobalEval( getAll( node, "script" ) );
 			}
 			node.parentNode.removeChild( node );
@@ -5800,7 +5983,7 @@ jQuery.extend( {
 	clone: function( elem, dataAndEvents, deepDataAndEvents ) {
 		var i, l, srcElements, destElements,
 			clone = elem.cloneNode( true ),
-			inPage = jQuery.contains( elem.ownerDocument, elem );
+			inPage = isAttached( elem );
 
 		// Fix IE cloning issues
 		if ( !support.noCloneChecked && ( elem.nodeType === 1 || elem.nodeType === 11 ) &&
@@ -6096,8 +6279,10 @@ var rboxStyle = new RegExp( cssExpand.join( "|" ), "i" );
 
 		// Support: IE 9 only
 		// Detect overflow:scroll screwiness (gh-3699)
+		// Support: Chrome <=64
+		// Don't get tricked when zoom affects offsetWidth (gh-4029)
 		div.style.position = "absolute";
-		scrollboxSizeVal = div.offsetWidth === 36 || "absolute";
+		scrollboxSizeVal = roundPixelMeasures( div.offsetWidth / 3 ) === 12;
 
 		documentElement.removeChild( container );
 
@@ -6168,7 +6353,7 @@ function curCSS( elem, name, computed ) {
 	if ( computed ) {
 		ret = computed.getPropertyValue( name ) || computed[ name ];
 
-		if ( ret === "" && !jQuery.contains( elem.ownerDocument, elem ) ) {
+		if ( ret === "" && !isAttached( elem ) ) {
 			ret = jQuery.style( elem, name );
 		}
 
@@ -6224,29 +6409,12 @@ function addGetHookIf( conditionFn, hookFn ) {
 }
 
 
-var
+var cssPrefixes = [ "Webkit", "Moz", "ms" ],
+	emptyStyle = document.createElement( "div" ).style,
+	vendorProps = {};
 
-	// Swappable if display is none or starts with table
-	// except "table", "table-cell", or "table-caption"
-	// See here for display values: https://developer.mozilla.org/en-US/docs/CSS/display
-	rdisplayswap = /^(none|table(?!-c[ea]).+)/,
-	rcustomProp = /^--/,
-	cssShow = { position: "absolute", visibility: "hidden", display: "block" },
-	cssNormalTransform = {
-		letterSpacing: "0",
-		fontWeight: "400"
-	},
-
-	cssPrefixes = [ "Webkit", "Moz", "ms" ],
-	emptyStyle = document.createElement( "div" ).style;
-
-// Return a css property mapped to a potentially vendor prefixed property
+// Return a vendor-prefixed property or undefined
 function vendorPropName( name ) {
-
-	// Shortcut for names that are not vendor prefixed
-	if ( name in emptyStyle ) {
-		return name;
-	}
 
 	// Check for vendor prefixed names
 	var capName = name[ 0 ].toUpperCase() + name.slice( 1 ),
@@ -6260,15 +6428,32 @@ function vendorPropName( name ) {
 	}
 }
 
-// Return a property mapped along what jQuery.cssProps suggests or to
-// a vendor prefixed property.
+// Return a potentially-mapped jQuery.cssProps or vendor prefixed property
 function finalPropName( name ) {
-	var ret = jQuery.cssProps[ name ];
-	if ( !ret ) {
-		ret = jQuery.cssProps[ name ] = vendorPropName( name ) || name;
+	var final = jQuery.cssProps[ name ] || vendorProps[ name ];
+
+	if ( final ) {
+		return final;
 	}
-	return ret;
+	if ( name in emptyStyle ) {
+		return name;
+	}
+	return vendorProps[ name ] = vendorPropName( name ) || name;
 }
+
+
+var
+
+	// Swappable if display is none or starts with table
+	// except "table", "table-cell", or "table-caption"
+	// See here for display values: https://developer.mozilla.org/en-US/docs/CSS/display
+	rdisplayswap = /^(none|table(?!-c[ea]).+)/,
+	rcustomProp = /^--/,
+	cssShow = { position: "absolute", visibility: "hidden", display: "block" },
+	cssNormalTransform = {
+		letterSpacing: "0",
+		fontWeight: "400"
+	};
 
 function setPositiveNumber( elem, value, subtract ) {
 
@@ -6341,7 +6526,10 @@ function boxModelAdjustment( elem, dimension, box, isBorderBox, styles, computed
 			delta -
 			extra -
 			0.5
-		) );
+
+		// If offsetWidth/offsetHeight is unknown, then we can't determine content-box scroll gutter
+		// Use an explicit zero to avoid NaN (gh-3964)
+		) ) || 0;
 	}
 
 	return delta;
@@ -6351,9 +6539,16 @@ function getWidthOrHeight( elem, dimension, extra ) {
 
 	// Start with computed style
 	var styles = getStyles( elem ),
+
+		// To avoid forcing a reflow, only fetch boxSizing if we need it (gh-4322).
+		// Fake content-box until we know it's needed to know the true value.
+		boxSizingNeeded = !support.boxSizingReliable() || extra,
+		isBorderBox = boxSizingNeeded &&
+			jQuery.css( elem, "boxSizing", false, styles ) === "border-box",
+		valueIsBorderBox = isBorderBox,
+
 		val = curCSS( elem, dimension, styles ),
-		isBorderBox = jQuery.css( elem, "boxSizing", false, styles ) === "border-box",
-		valueIsBorderBox = isBorderBox;
+		offsetProp = "offset" + dimension[ 0 ].toUpperCase() + dimension.slice( 1 );
 
 	// Support: Firefox <=54
 	// Return a confounding non-pixel value or feign ignorance, as appropriate.
@@ -6364,22 +6559,29 @@ function getWidthOrHeight( elem, dimension, extra ) {
 		val = "auto";
 	}
 
-	// Check for style in case a browser which returns unreliable values
-	// for getComputedStyle silently falls back to the reliable elem.style
-	valueIsBorderBox = valueIsBorderBox &&
-		( support.boxSizingReliable() || val === elem.style[ dimension ] );
 
 	// Fall back to offsetWidth/offsetHeight when value is "auto"
 	// This happens for inline elements with no explicit setting (gh-3571)
 	// Support: Android <=4.1 - 4.3 only
 	// Also use offsetWidth/offsetHeight for misreported inline dimensions (gh-3602)
-	if ( val === "auto" ||
-		!parseFloat( val ) && jQuery.css( elem, "display", false, styles ) === "inline" ) {
+	// Support: IE 9-11 only
+	// Also use offsetWidth/offsetHeight for when box sizing is unreliable
+	// We use getClientRects() to check for hidden/disconnected.
+	// In those cases, the computed value can be trusted to be border-box
+	if ( ( !support.boxSizingReliable() && isBorderBox ||
+		val === "auto" ||
+		!parseFloat( val ) && jQuery.css( elem, "display", false, styles ) === "inline" ) &&
+		elem.getClientRects().length ) {
 
-		val = elem[ "offset" + dimension[ 0 ].toUpperCase() + dimension.slice( 1 ) ];
+		isBorderBox = jQuery.css( elem, "boxSizing", false, styles ) === "border-box";
 
-		// offsetWidth/offsetHeight provide border-box values
-		valueIsBorderBox = true;
+		// Where available, offsetWidth/offsetHeight approximate border box dimensions.
+		// Where not available (e.g., SVG), assume unreliable box-sizing and interpret the
+		// retrieved value as a content box dimension.
+		valueIsBorderBox = offsetProp in elem;
+		if ( valueIsBorderBox ) {
+			val = elem[ offsetProp ];
+		}
 	}
 
 	// Normalize "" and auto
@@ -6425,6 +6627,13 @@ jQuery.extend( {
 		"flexGrow": true,
 		"flexShrink": true,
 		"fontWeight": true,
+		"gridArea": true,
+		"gridColumn": true,
+		"gridColumnEnd": true,
+		"gridColumnStart": true,
+		"gridRow": true,
+		"gridRowEnd": true,
+		"gridRowStart": true,
 		"lineHeight": true,
 		"opacity": true,
 		"order": true,
@@ -6480,7 +6689,9 @@ jQuery.extend( {
 			}
 
 			// If a number was passed in, add the unit (except for certain CSS properties)
-			if ( type === "number" ) {
+			// The isCustomProp check can be removed in jQuery 4.0 when we only auto-append
+			// "px" to a few hardcoded values.
+			if ( type === "number" && !isCustomProp ) {
 				value += ret && ret[ 3 ] || ( jQuery.cssNumber[ origName ] ? "" : "px" );
 			}
 
@@ -6580,18 +6791,29 @@ jQuery.each( [ "height", "width" ], function( i, dimension ) {
 		set: function( elem, value, extra ) {
 			var matches,
 				styles = getStyles( elem ),
-				isBorderBox = jQuery.css( elem, "boxSizing", false, styles ) === "border-box",
-				subtract = extra && boxModelAdjustment(
-					elem,
-					dimension,
-					extra,
-					isBorderBox,
-					styles
-				);
+
+				// Only read styles.position if the test has a chance to fail
+				// to avoid forcing a reflow.
+				scrollboxSizeBuggy = !support.scrollboxSize() &&
+					styles.position === "absolute",
+
+				// To avoid forcing a reflow, only fetch boxSizing if we need it (gh-3991)
+				boxSizingNeeded = scrollboxSizeBuggy || extra,
+				isBorderBox = boxSizingNeeded &&
+					jQuery.css( elem, "boxSizing", false, styles ) === "border-box",
+				subtract = extra ?
+					boxModelAdjustment(
+						elem,
+						dimension,
+						extra,
+						isBorderBox,
+						styles
+					) :
+					0;
 
 			// Account for unreliable border-box dimensions by comparing offset* to computed and
 			// faking a content-box to get border and padding (gh-3699)
-			if ( isBorderBox && support.scrollboxSize() === styles.position ) {
+			if ( isBorderBox && scrollboxSizeBuggy ) {
 				subtract -= Math.ceil(
 					elem[ "offset" + dimension[ 0 ].toUpperCase() + dimension.slice( 1 ) ] -
 					parseFloat( styles[ dimension ] ) -
@@ -6759,9 +6981,9 @@ Tween.propHooks = {
 			// Use .style if available and use plain properties where available.
 			if ( jQuery.fx.step[ tween.prop ] ) {
 				jQuery.fx.step[ tween.prop ]( tween );
-			} else if ( tween.elem.nodeType === 1 &&
-				( tween.elem.style[ jQuery.cssProps[ tween.prop ] ] != null ||
-					jQuery.cssHooks[ tween.prop ] ) ) {
+			} else if ( tween.elem.nodeType === 1 && (
+					jQuery.cssHooks[ tween.prop ] ||
+					tween.elem.style[ finalPropName( tween.prop ) ] != null ) ) {
 				jQuery.style( tween.elem, tween.prop, tween.now + tween.unit );
 			} else {
 				tween.elem[ tween.prop ] = tween.now;
@@ -8468,6 +8690,10 @@ jQuery.param = function( a, traditional ) {
 				encodeURIComponent( value == null ? "" : value );
 		};
 
+	if ( a == null ) {
+		return "";
+	}
+
 	// If an array was passed in, assume that it is an array of form elements.
 	if ( Array.isArray( a ) || ( a.jquery && !jQuery.isPlainObject( a ) ) ) {
 
@@ -8970,12 +9196,14 @@ jQuery.extend( {
 						if ( !responseHeaders ) {
 							responseHeaders = {};
 							while ( ( match = rheaders.exec( responseHeadersString ) ) ) {
-								responseHeaders[ match[ 1 ].toLowerCase() ] = match[ 2 ];
+								responseHeaders[ match[ 1 ].toLowerCase() + " " ] =
+									( responseHeaders[ match[ 1 ].toLowerCase() + " " ] || [] )
+										.concat( match[ 2 ] );
 							}
 						}
-						match = responseHeaders[ key.toLowerCase() ];
+						match = responseHeaders[ key.toLowerCase() + " " ];
 					}
-					return match == null ? null : match;
+					return match == null ? null : match.join( ", " );
 				},
 
 				// Raw string
@@ -9364,7 +9592,7 @@ jQuery.each( [ "get", "post" ], function( i, method ) {
 } );
 
 
-jQuery._evalUrl = function( url ) {
+jQuery._evalUrl = function( url, options ) {
 	return jQuery.ajax( {
 		url: url,
 
@@ -9374,7 +9602,16 @@ jQuery._evalUrl = function( url ) {
 		cache: true,
 		async: false,
 		global: false,
-		"throws": true
+
+		// Only evaluate the response if it is successful (gh-4126)
+		// dataFilter is not invoked for failure responses, so using it instead
+		// of the default converter is kludgy but it works.
+		converters: {
+			"text script": function() {}
+		},
+		dataFilter: function( response ) {
+			jQuery.globalEval( response, options );
+		}
 	} );
 };
 
@@ -9657,24 +9894,21 @@ jQuery.ajaxPrefilter( "script", function( s ) {
 // Bind script tag hack transport
 jQuery.ajaxTransport( "script", function( s ) {
 
-	// This transport only deals with cross domain requests
-	if ( s.crossDomain ) {
+	// This transport only deals with cross domain or forced-by-attrs requests
+	if ( s.crossDomain || s.scriptAttrs ) {
 		var script, callback;
 		return {
 			send: function( _, complete ) {
-				script = jQuery( "<script>" ).prop( {
-					charset: s.scriptCharset,
-					src: s.url
-				} ).on(
-					"load error",
-					callback = function( evt ) {
+				script = jQuery( "<script>" )
+					.attr( s.scriptAttrs || {} )
+					.prop( { charset: s.scriptCharset, src: s.url } )
+					.on( "load error", callback = function( evt ) {
 						script.remove();
 						callback = null;
 						if ( evt ) {
 							complete( evt.type === "error" ? 404 : 200, evt.type );
 						}
-					}
-				);
+					} );
 
 				// Use native DOM manipulation to avoid our domManip AJAX trickery
 				document.head.appendChild( script[ 0 ] );
@@ -10424,6 +10658,7 @@ var page_1 = require("./pages/6611/page");
 var page_2 = require("./pages/6612/page");
 var page_3 = require("./pages/6613/page");
 var page_4 = require("./pages/6614/page");
+var page_5 = require("./pages/6615/page");
 var sco_pug_1 = require("./sco.pug");
 var sco = core_1.ScoFactory.createSco({
     name: "1221",
@@ -10432,24 +10667,24 @@ var sco = core_1.ScoFactory.createSco({
         page_1.page,
         page_2.page,
         page_4.page,
-        page_3.page
+        page_3.page,
+        page_5.page
     ],
     components: [
         hz_navbar_1.HzNavbarComponent
     ]
 });
 //error
-sco.on();
 sco.run();
 //# sourceMappingURL=index.js.map
 });
 ___scope___.file("sco1221/main.scss", function(exports, require, module, __filename, __dirname){
 
-__fsbx_css("sco1221/main.scss", "/* Estilos de prueba. NO UTILIZAR en proyecto*/\n/* Common */\n/*Cross browser: reset vendor styles*/\nhtml, body, span, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre,\narticle, aside, details, dialog, figcaption, figure, footer, header, main, nav, section, summary, audio, canvas, video, mark, code, kbd, pre, samp,\na, abbr, acronym, address, code, del, dfn, em, strong, img, q, dl, dt, dd, ol, ul,\nli, fieldset, form, label, legend, table, caption, tbody, tfoot, thead,\ntr, th, td, div {\n  line-height: initial;\n  margin: 0;\n  padding: 0;\n  border: none;\n  font-weight: normal;\n  font-style: normal;\n  font-size: 100%;\n  font-family: inherit;\n  vertical-align: baseline;\n  text-decoration: none;\n  -ms-box-sizing: border-box;\n  -webkit-box-sizing: border-box;\n  -moz-box-sizing: border-box;\n  box-sizing: border-box;\n}\n\nhtml {\n  font-family: sans-serif;\n  /* 1 */\n  line-height: 1.15;\n  /* 2 */\n  -ms-text-size-adjust: 100%;\n  /* 3 */\n  -webkit-text-size-adjust: 100%;\n  /* 3 */\n}\n\ninput, button, select, textarea {\n  line-height: initial;\n  margin: 0;\n  padding: 0;\n  font-weight: normal;\n  font-style: normal;\n  font-size: 100%;\n  font-family: inherit;\n  vertical-align: baseline;\n  text-decoration: none;\n  -ms-box-sizing: border-box;\n  -webkit-box-sizing: border-box;\n  -moz-box-sizing: border-box;\n  box-sizing: border-box;\n}\n\nul, ol, dl {\n  list-style: none;\n}\n\ninput[type=\"text\"] {\n  -webkit-appearance: none;\n}\n\nbody input[type=\"search\"] {\n  box-sizing: border-box;\n}\n\ni {\n  font-style: normal;\n}\n\n/*html elements*/\narticle,\naside,\ndetails,\nfigcaption,\nfigure,\nfooter,\nheader,\nmain,\nmenu,\nnav,\nsection,\nsummary {\n  /* 1 */\n  display: block;\n}\n\n/*! extends from normalize.css v4.1.1 | MIT License | github.com/necolas/normalize.css */\n/**\r\n * 1. Change the default font family in all browsers (opinionated).\r\n * 2. Correct the line height in all browsers.\r\n * 3. Prevent adjustments of font size after orientation changes in IE and iOS.\r\n */\nhtml {\n  font-family: sans-serif;\n  /* 1 */\n  font-size: 100%;\n  line-height: 1.15;\n  /* 2 */\n  -ms-text-size-adjust: 100%;\n  /* 3 */\n  -webkit-text-size-adjust: 100%;\n  /* 3 */\n}\n\n/**\r\n * Remove the margin in all browsers (opinionated).\r\n */\nbody {\n  margin: 0;\n}\n\n/* HTML5 display definitions\r\n   ========================================================================== */\n/**\r\n * Add the correct display in IE 9-.\r\n * 1. Add the correct display in Edge, IE, and Firefox.\r\n * 2. Add the correct display in IE.\r\n */\narticle,\naside,\ndetails,\nfigcaption,\nfigure,\nfooter,\nheader,\nmain,\nmenu,\nnav,\nsection,\nsummary {\n  /* 1 */\n  display: block;\n}\n\n/**\r\n * Add the correct display in IE 9-.\r\n */\naudio,\ncanvas,\nprogress,\nvideo {\n  display: inline-block;\n}\n\n/**\r\n * Add the correct display in iOS 4-7.\r\n */\naudio:not([controls]) {\n  display: none;\n  height: 0;\n}\n\n/**\r\n * Add the correct vertical alignment in Chrome, Firefox, and Opera.\r\n */\nprogress {\n  vertical-align: baseline;\n}\n\n/**\r\n * Add the correct display in IE 10-.\r\n * 1. Add the correct display in IE.\r\n */\ntemplate,\n[hidden] {\n  display: none;\n}\n\n/* Links\r\n   ========================================================================== */\n/**\r\n * 1. Remove the gray background on active links in IE 10.\r\n * 2. Remove gaps in links underline in iOS 8+ and Safari 8+.\r\n */\na {\n  background-color: transparent;\n  /* 1 */\n  -webkit-text-decoration-skip: objects;\n  /* 2 */\n}\n\n/**\r\n * Remove the outline on focused links when they are also active or hovered\r\n * in all browsers (opinionated).\r\n */\na:active,\na:hover,\na:visited {\n  outline-width: 0;\n  color: inherit;\n}\n\n/* Text-level semantics\r\n   ========================================================================== */\n/**\r\n * 1. Remove the bottom border in Firefox 39-.\r\n * 2. Add the correct text decoration in Chrome, Edge, IE, Opera, and Safari.\r\n */\nabbr[title] {\n  border-bottom: none;\n  /* 1 */\n  text-decoration: underline;\n  /* 2 */\n  text-decoration: underline dotted;\n  /* 2 */\n}\n\n/**\r\n * Prevent the duplicate application of `bolder` by the next rule in Safari 6.\r\n */\nb,\nstrong {\n  font-weight: inherit;\n}\n\n/**\r\n * Add the correct font weight in Chrome, Edge, and Safari.\r\n */\nb,\nstrong {\n  font-weight: bold;\n}\n\n/**\r\n * Add the correct font style in Android 4.3-.\r\n */\ndfn {\n  font-style: italic;\n}\n\n/**\r\n * Add the correct background and color in IE 9-.\r\n */\nmark {\n  background-color: #ff0;\n  color: #000;\n}\n\n/**\r\n * Add the correct font size in all browsers.\r\n */\nsmall {\n  font-size: 80%;\n}\n\n/**\r\n * Prevent `sub` and `sup` elements from affecting the line height in\r\n * all browsers.\r\n */\nsub,\nsup {\n  font-size: 75%;\n  line-height: 0;\n  position: relative;\n  vertical-align: baseline;\n}\n\nsub {\n  bottom: -0.25em;\n}\n\nsup {\n  top: -0.5em;\n}\n\n/* Embedded content\r\n   ========================================================================== */\n/**\r\n * Remove the border on images inside links in IE 10-.\r\n */\nimg {\n  border-style: none;\n  max-width: 100%;\n}\n\n/**\r\n * Hide the overflow in IE.\r\n */\nsvg:not(:root) {\n  overflow: hidden;\n}\n\n/* Grouping content\r\n   ========================================================================== */\n/**\r\n * 1. Correct the inheritance and scaling of font size in all browsers.\r\n * 2. Correct the odd `em` font sizing in all browsers.\r\n */\ncode,\nkbd,\npre,\nsamp {\n  font-family: monospace, monospace;\n  /* 1 */\n  font-size: 1em;\n  /* 2 */\n}\n\n/**\r\n * 1. Add the correct box sizing in Firefox.\r\n * 2. Show the overflow in Edge and IE.\r\n */\nhr {\n  box-sizing: content-box;\n  /* 1 */\n  height: 0;\n  /* 1 */\n  overflow: visible;\n  /* 2 */\n}\n\n/* Forms\r\n   ========================================================================== */\n/**\r\n * 1. Change font properties to `inherit` in all browsers (opinionated).\r\n * 2. Remove the margin in Firefox and Safari.\r\n */\nbutton,\ninput,\noptgroup,\nselect,\ntextarea {\n  font: inherit;\n  /* 1 */\n  margin: 0;\n  /* 2 */\n}\n\n/**\r\n * Restore the font weight unset by the previous rule.\r\n */\noptgroup {\n  font-weight: bold;\n}\n\n/**\r\n * Show the overflow in IE.\r\n * 1. Show the overflow in Edge.\r\n */\nbutton,\ninput {\n  /* 1 */\n  overflow: visible;\n}\n\n/**\r\n * Remove the inheritance of text transform in Edge, Firefox, and IE.\r\n * 1. Remove the inheritance of text transform in Firefox.\r\n */\nbutton,\nselect {\n  /* 1 */\n  text-transform: none;\n}\n\n/**\r\n * 1. Prevent a WebKit bug where (2) destroys native `audio` and `video`\r\n *    controls in Android 4.\r\n * 2. Correct the inability to style clickable types in iOS and Safari.\r\n */\nbutton,\nhtml [type=\"button\"],\n[type=\"reset\"],\n[type=\"submit\"] {\n  -webkit-appearance: button;\n  /* 2 */\n}\n\n/**\r\n * Remove the inner border and padding in Firefox.\r\n */\nbutton::-moz-focus-inner,\n[type=\"button\"]::-moz-focus-inner,\n[type=\"reset\"]::-moz-focus-inner,\n[type=\"submit\"]::-moz-focus-inner {\n  border-style: none;\n  padding: 0;\n}\n\n/**\r\n * 1. Correct the text wrapping in Edge and IE.\r\n * 2. Correct the color inheritance from `fieldset` elements in IE.\r\n * 3. Remove the padding so developers are not caught out when they zero out\r\n *    `fieldset` elements in all browsers.\r\n */\nlegend {\n  box-sizing: border-box;\n  /* 1 */\n  color: inherit;\n  /* 2 */\n  display: table;\n  /* 1 */\n  max-width: 100%;\n  /* 1 */\n  padding: 0;\n  /* 3 */\n  white-space: normal;\n  /* 1 */\n}\n\n/**\r\n * Remove the default vertical scrollbar in IE.\r\n */\ntextarea {\n  overflow: auto;\n}\n\n/**\r\n * Correct the cursor style of increment and decrement buttons in Chrome.\r\n */\n[type=\"number\"]::-webkit-inner-spin-button,\n[type=\"number\"]::-webkit-outer-spin-button {\n  height: auto;\n}\n\n/**\r\n * 1. Correct the odd appearance in Chrome and Safari.\r\n * 2. Correct the outline style in Safari.\r\n */\n[type=\"search\"] {\n  -webkit-appearance: textfield;\n  /* 1 */\n  outline-offset: -2px;\n  /* 2 */\n}\n\n/**\r\n * Remove the inner padding and cancel buttons in Chrome and Safari on OS X.\r\n */\n[type=\"search\"]::-webkit-search-cancel-button,\n[type=\"search\"]::-webkit-search-decoration {\n  -webkit-appearance: none;\n}\n\n/**\r\n * Correct the text style of placeholders in Chrome, Edge, and Safari.\r\n */\n::-webkit-input-placeholder {\n  color: inherit;\n  opacity: 0.54;\n}\n\n/**\r\n * 1. Correct the inability to style clickable types in iOS and Safari.\r\n * 2. Change font properties to `inherit` in Safari.\r\n */\n::-webkit-file-upload-button {\n  -webkit-appearance: button;\n  /* 1 */\n  font: inherit;\n  /* 2 */\n}\n\n/* End common */\n/* Components */\nbody {\n  width: 80%;\n  margin: 0 auto;\n  padding: 1em;\n}\n\n/* _mod-viewer */\n.mod-viewer {\n  height: 95vh;\n  display: flex;\n  flex-direction: column;\n  opacity: 0.9;\n  overflow: hidden;\n}\n\n.mod-viewer [data-hz-pages],\n.mod-viewer [hz-pages] {\n  overflow: auto;\n}\n\n/* End _mod-viewer */\n/* _hz-navbar.theme-default */\n/* _hz-navbar.structure */\n.hz-navbar {\n  display: flex;\n  padding: 0.75em;\n  align-items: center;\n}\n\n.hz-navbar .hz-navbar__btn {\n  margin: 0;\n  padding: 0;\n  border: none;\n  cursor: pointer;\n  background: none;\n  outline: none;\n}\n\n.hz-navbar .hz-navbar__progress {\n  width: 33.3%;\n  display: flex;\n  align-items: center;\n}\n\n.hz-navbar .hz-navbar__progress-mask {\n  position: absolute;\n  top: 0;\n  right: 0;\n  bottom: 0;\n  left: 0;\n  z-index: 1;\n}\n\n.hz-navbar .hz-navbar__progress-bar {\n  height: 1.125em;\n  width: 75%;\n  position: relative;\n}\n\n.hz-navbar .hz-navbar__progress-value {\n  height: 100%;\n  transform: scaleX(0);\n  transform-origin: left;\n}\n\n.hz-navbar .hz-navbar__progress-percentage {\n  margin-left: 0.375em;\n}\n\n.hz-navbar .hz-navbar__actions {\n  display: flex;\n  width: 33.3%;\n  justify-content: center;\n}\n\n.hz-navbar .hz-navbar__actions .hz-navbar__btn {\n  margin: 0 0.375em;\n}\n\n.hz-navbar .hz-navbar__pager {\n  display: flex;\n  align-items: center;\n  width: 33.3%;\n  justify-content: flex-end;\n}\n\n.hz-navbar .hz-navbar__pages {\n  padding: 0 0.375em;\n}\n\n.hz-navbar .hz-navbar__total:before {\n  content: \"/\";\n}\n\n.hz-navbar__dialog {\n  position: absolute;\n  background-color: #fff;\n}\n\n.ui-widget-overlay {\n  background-color: rgba(0, 0, 0, 0.25);\n}\n\n/* End _hz-navbar.structure */\n.hz-navbar {\n  background-color: rgba(0, 0, 0, 0.5);\n}\n\n.hz-navbar .hz-navbar__progress-percentage {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__btn {\n  transition: all 400ms ease;\n}\n\n.hz-navbar .hz-navbar__btn .hz-navbar__content {\n  position: absolute;\n  top: 0;\n  left: -99999em;\n}\n\n.hz-navbar .hz-navbar__btn:not([disabled]):hover, .hz-navbar .hz-navbar__btn:not([disabled]):focus {\n  transform: scale(1.2);\n}\n\n.hz-navbar .hz-navbar__btn[disabled] {\n  opacity: 0.5;\n  cursor: default;\n}\n\n.hz-navbar .hz-navbar__progress-bar {\n  border: 2px solid none;\n  background-color: #999;\n}\n\n.hz-navbar .hz-navbar__progress-value {\n  transition: all 400ms ease;\n  background-color: #ddd;\n}\n\n.hz-navbar .hz-navbar__actions .hz-navbar__btn {\n  font-size: 1em;\n}\n\n.hz-navbar .hz-navbar__actions .hz-navbar__btn:after {\n  transition: all 400ms ease;\n  font-family: FontAwesome;\n  font-size: 1.75em;\n}\n\n.hz-navbar .hz-navbar__action-home {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-home:not([disabled]):hover, .hz-navbar .hz-navbar__action-home:not([disabled]):focus {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-home:not([disabled]):hover:after, .hz-navbar .hz-navbar__action-home:not([disabled]):focus:after {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-home:after {\n  content: \"\\f015\";\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index:not([disabled]):hover, .hz-navbar .hz-navbar__action-index:not([disabled]):focus {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index:not([disabled]):hover:after, .hz-navbar .hz-navbar__action-index:not([disabled]):focus:after {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index:after {\n  content: \"\\f0ca\";\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-exit {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-exit:not([disabled]):hover, .hz-navbar .hz-navbar__action-exit:not([disabled]):focus {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-exit:not([disabled]):hover:after, .hz-navbar .hz-navbar__action-exit:not([disabled]):focus:after {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-exit:after {\n  content: \"\\f08b\";\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn {\n  display: flex;\n  flex-direction: row;\n  align-items: center;\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn:after {\n  font-family: FontAwesome;\n  font-size: 1.875em;\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn.hz-navbar__prev:after {\n  content: \"\\f053\";\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn.hz-navbar__next:after {\n  content: \"\\f054\";\n}\n\n.hz-navbar .hz-navbar__pages {\n  color: #fff;\n}\n\n.ui-dialog.hz-navbar__dialog {\n  padding: 0;\n  box-shadow: 0 4px 5px 0 rgba(0, 0, 0, 0.14), 0 1px 10px 0 rgba(0, 0, 0, 0.12), 0 2px 4px -1px rgba(0, 0, 0, 0.2);\n}\n\n.ui-dialog.hz-navbar__dialog .ui-dialog-titlebar {\n  background-color: #999;\n}\n\n.ui-dialog.hz-navbar__dialog .ui-dialog-titlebar-close {\n  font-size: 0;\n  background: none;\n  border: none;\n  cursor: pointer;\n}\n\n.ui-dialog.hz-navbar__dialog .ui-dialog-titlebar-close:after {\n  content: \"\\f00d\";\n  font-size: 1rem;\n  color: #fff;\n  font-family: \"FontAwesome\";\n}\n\n.ui-dialog.hz-navbar__dialog .hz-navbar__index-item .hz-navbar__index-item-content {\n  color: #666;\n  cursor: default;\n}\n\n.ui-dialog.hz-navbar__dialog .hz-navbar__index-item.hz-navbar__page--completed .hz-navbar__index-item-content {\n  color: #999;\n  cursor: pointer;\n}\n\n.ui-dialog.hz-navbar__dialog .hz-navbar__index-item.hz-navbar__page--visited .hz-navbar__index-item-content,\n.ui-dialog.hz-navbar__dialog .hz-navbar__index-item.hz-navbar__page--completed + .hz-navbar__index-item .hz-navbar__index-item-content {\n  color: #333;\n  cursor: pointer;\n}\n\n/* End _hz-navbar.theme-default */\n/* End components */\n\n/*# sourceMappingURL=main.scss.map */");
+__fsbx_css("sco1221/main.scss", "/* Estilos de prueba. NO UTILIZAR en proyecto*/\n/* Common */\n/*Cross browser: reset vendor styles*/\nhtml, body, span, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre,\narticle, aside, details, dialog, figcaption, figure, footer, header, main, nav, section, summary, audio, canvas, video, mark, code, kbd, pre, samp,\na, abbr, acronym, address, code, del, dfn, em, strong, img, q, dl, dt, dd, ol, ul,\nli, fieldset, form, label, legend, table, caption, tbody, tfoot, thead,\ntr, th, td, div {\n  line-height: initial;\n  margin: 0;\n  padding: 0;\n  border: none;\n  font-weight: normal;\n  font-style: normal;\n  font-size: 100%;\n  font-family: inherit;\n  vertical-align: baseline;\n  text-decoration: none;\n  -ms-box-sizing: border-box;\n  -webkit-box-sizing: border-box;\n  -moz-box-sizing: border-box;\n  box-sizing: border-box;\n}\n\nhtml {\n  font-family: sans-serif;\n  /* 1 */\n  line-height: 1.15;\n  /* 2 */\n  -ms-text-size-adjust: 100%;\n  /* 3 */\n  -webkit-text-size-adjust: 100%;\n  /* 3 */\n}\n\ninput, button, select, textarea {\n  line-height: initial;\n  margin: 0;\n  padding: 0;\n  font-weight: normal;\n  font-style: normal;\n  font-size: 100%;\n  font-family: inherit;\n  vertical-align: baseline;\n  text-decoration: none;\n  -ms-box-sizing: border-box;\n  -webkit-box-sizing: border-box;\n  -moz-box-sizing: border-box;\n  box-sizing: border-box;\n}\n\nul, ol, dl {\n  list-style: none;\n}\n\ninput[type=\"text\"] {\n  -webkit-appearance: none;\n}\n\nbody input[type=\"search\"] {\n  box-sizing: border-box;\n}\n\ni {\n  font-style: normal;\n}\n\n/*html elements*/\narticle,\naside,\ndetails,\nfigcaption,\nfigure,\nfooter,\nheader,\nmain,\nmenu,\nnav,\nsection,\nsummary {\n  /* 1 */\n  display: block;\n}\n\n/*! extends from normalize.css v4.1.1 | MIT License | github.com/necolas/normalize.css */\n/**\r\n * 1. Change the default font family in all browsers (opinionated).\r\n * 2. Correct the line height in all browsers.\r\n * 3. Prevent adjustments of font size after orientation changes in IE and iOS.\r\n */\nhtml {\n  font-family: sans-serif;\n  /* 1 */\n  font-size: 100%;\n  line-height: 1.15;\n  /* 2 */\n  -ms-text-size-adjust: 100%;\n  /* 3 */\n  -webkit-text-size-adjust: 100%;\n  /* 3 */\n}\n\n/**\r\n * Remove the margin in all browsers (opinionated).\r\n */\nbody {\n  margin: 0;\n}\n\n/* HTML5 display definitions\r\n   ========================================================================== */\n/**\r\n * Add the correct display in IE 9-.\r\n * 1. Add the correct display in Edge, IE, and Firefox.\r\n * 2. Add the correct display in IE.\r\n */\narticle,\naside,\ndetails,\nfigcaption,\nfigure,\nfooter,\nheader,\nmain,\nmenu,\nnav,\nsection,\nsummary {\n  /* 1 */\n  display: block;\n}\n\n/**\r\n * Add the correct display in IE 9-.\r\n */\naudio,\ncanvas,\nprogress,\nvideo {\n  display: inline-block;\n}\n\n/**\r\n * Add the correct display in iOS 4-7.\r\n */\naudio:not([controls]) {\n  display: none;\n  height: 0;\n}\n\n/**\r\n * Add the correct vertical alignment in Chrome, Firefox, and Opera.\r\n */\nprogress {\n  vertical-align: baseline;\n}\n\n/**\r\n * Add the correct display in IE 10-.\r\n * 1. Add the correct display in IE.\r\n */\ntemplate,\n[hidden] {\n  display: none;\n}\n\n/* Links\r\n   ========================================================================== */\n/**\r\n * 1. Remove the gray background on active links in IE 10.\r\n * 2. Remove gaps in links underline in iOS 8+ and Safari 8+.\r\n */\na {\n  background-color: transparent;\n  /* 1 */\n  -webkit-text-decoration-skip: objects;\n  /* 2 */\n}\n\n/**\r\n * Remove the outline on focused links when they are also active or hovered\r\n * in all browsers (opinionated).\r\n */\na:active,\na:hover,\na:visited {\n  outline-width: 0;\n  color: inherit;\n}\n\n/* Text-level semantics\r\n   ========================================================================== */\n/**\r\n * 1. Remove the bottom border in Firefox 39-.\r\n * 2. Add the correct text decoration in Chrome, Edge, IE, Opera, and Safari.\r\n */\nabbr[title] {\n  border-bottom: none;\n  /* 1 */\n  text-decoration: underline;\n  /* 2 */\n  text-decoration: underline dotted;\n  /* 2 */\n}\n\n/**\r\n * Prevent the duplicate application of `bolder` by the next rule in Safari 6.\r\n */\nb,\nstrong {\n  font-weight: inherit;\n}\n\n/**\r\n * Add the correct font weight in Chrome, Edge, and Safari.\r\n */\nb,\nstrong {\n  font-weight: bold;\n}\n\n/**\r\n * Add the correct font style in Android 4.3-.\r\n */\ndfn {\n  font-style: italic;\n}\n\n/**\r\n * Add the correct background and color in IE 9-.\r\n */\nmark {\n  background-color: #ff0;\n  color: #000;\n}\n\n/**\r\n * Add the correct font size in all browsers.\r\n */\nsmall {\n  font-size: 80%;\n}\n\n/**\r\n * Prevent `sub` and `sup` elements from affecting the line height in\r\n * all browsers.\r\n */\nsub,\nsup {\n  font-size: 75%;\n  line-height: 0;\n  position: relative;\n  vertical-align: baseline;\n}\n\nsub {\n  bottom: -0.25em;\n}\n\nsup {\n  top: -0.5em;\n}\n\n/* Embedded content\r\n   ========================================================================== */\n/**\r\n * Remove the border on images inside links in IE 10-.\r\n */\nimg {\n  border-style: none;\n  max-width: 100%;\n}\n\n/**\r\n * Hide the overflow in IE.\r\n */\nsvg:not(:root) {\n  overflow: hidden;\n}\n\n/* Grouping content\r\n   ========================================================================== */\n/**\r\n * 1. Correct the inheritance and scaling of font size in all browsers.\r\n * 2. Correct the odd `em` font sizing in all browsers.\r\n */\ncode,\nkbd,\npre,\nsamp {\n  font-family: monospace, monospace;\n  /* 1 */\n  font-size: 1em;\n  /* 2 */\n}\n\n/**\r\n * 1. Add the correct box sizing in Firefox.\r\n * 2. Show the overflow in Edge and IE.\r\n */\nhr {\n  box-sizing: content-box;\n  /* 1 */\n  height: 0;\n  /* 1 */\n  overflow: visible;\n  /* 2 */\n}\n\n/* Forms\r\n   ========================================================================== */\n/**\r\n * 1. Change font properties to `inherit` in all browsers (opinionated).\r\n * 2. Remove the margin in Firefox and Safari.\r\n */\nbutton,\ninput,\noptgroup,\nselect,\ntextarea {\n  font: inherit;\n  /* 1 */\n  margin: 0;\n  /* 2 */\n}\n\n/**\r\n * Restore the font weight unset by the previous rule.\r\n */\noptgroup {\n  font-weight: bold;\n}\n\n/**\r\n * Show the overflow in IE.\r\n * 1. Show the overflow in Edge.\r\n */\nbutton,\ninput {\n  /* 1 */\n  overflow: visible;\n}\n\n/**\r\n * Remove the inheritance of text transform in Edge, Firefox, and IE.\r\n * 1. Remove the inheritance of text transform in Firefox.\r\n */\nbutton,\nselect {\n  /* 1 */\n  text-transform: none;\n}\n\n/**\r\n * 1. Prevent a WebKit bug where (2) destroys native `audio` and `video`\r\n *    controls in Android 4.\r\n * 2. Correct the inability to style clickable types in iOS and Safari.\r\n */\nbutton,\nhtml [type=\"button\"],\n[type=\"reset\"],\n[type=\"submit\"] {\n  -webkit-appearance: button;\n  /* 2 */\n}\n\n/**\r\n * Remove the inner border and padding in Firefox.\r\n */\nbutton::-moz-focus-inner,\n[type=\"button\"]::-moz-focus-inner,\n[type=\"reset\"]::-moz-focus-inner,\n[type=\"submit\"]::-moz-focus-inner {\n  border-style: none;\n  padding: 0;\n}\n\n/**\r\n * 1. Correct the text wrapping in Edge and IE.\r\n * 2. Correct the color inheritance from `fieldset` elements in IE.\r\n * 3. Remove the padding so developers are not caught out when they zero out\r\n *    `fieldset` elements in all browsers.\r\n */\nlegend {\n  box-sizing: border-box;\n  /* 1 */\n  color: inherit;\n  /* 2 */\n  display: table;\n  /* 1 */\n  max-width: 100%;\n  /* 1 */\n  padding: 0;\n  /* 3 */\n  white-space: normal;\n  /* 1 */\n}\n\n/**\r\n * Remove the default vertical scrollbar in IE.\r\n */\ntextarea {\n  overflow: auto;\n}\n\n/**\r\n * Correct the cursor style of increment and decrement buttons in Chrome.\r\n */\n[type=\"number\"]::-webkit-inner-spin-button,\n[type=\"number\"]::-webkit-outer-spin-button {\n  height: auto;\n}\n\n/**\r\n * 1. Correct the odd appearance in Chrome and Safari.\r\n * 2. Correct the outline style in Safari.\r\n */\n[type=\"search\"] {\n  -webkit-appearance: textfield;\n  /* 1 */\n  outline-offset: -2px;\n  /* 2 */\n}\n\n/**\r\n * Remove the inner padding and cancel buttons in Chrome and Safari on OS X.\r\n */\n[type=\"search\"]::-webkit-search-cancel-button,\n[type=\"search\"]::-webkit-search-decoration {\n  -webkit-appearance: none;\n}\n\n/**\r\n * Correct the text style of placeholders in Chrome, Edge, and Safari.\r\n */\n::-webkit-input-placeholder {\n  color: inherit;\n  opacity: 0.54;\n}\n\n/**\r\n * 1. Correct the inability to style clickable types in iOS and Safari.\r\n * 2. Change font properties to `inherit` in Safari.\r\n */\n::-webkit-file-upload-button {\n  -webkit-appearance: button;\n  /* 1 */\n  font: inherit;\n  /* 2 */\n}\n\n/* End common */\n/* Components */\nbody {\n  width: 80%;\n  margin: 0 auto;\n  padding: 1em;\n}\n\n/* _mod-viewer */\n.mod-viewer {\n  height: 95vh;\n  display: flex;\n  flex-direction: column;\n  opacity: 0.9;\n  overflow: hidden;\n}\n\n.mod-viewer [data-hz-pages],\n.mod-viewer [hz-pages] {\n  overflow: auto;\n}\n\n/* End _mod-viewer */\n/* _hz-navbar.theme-default */\n/* _hz-navbar.structure */\n.hz-navbar {\n  display: flex;\n  padding: 0.75em;\n  align-items: center;\n}\n\n.hz-navbar .hz-navbar__btn {\n  margin: 0;\n  padding: 0;\n  border: none;\n  cursor: pointer;\n  background: none;\n  outline: none;\n}\n\n.hz-navbar .hz-navbar__progress {\n  width: 33.3%;\n  display: flex;\n  align-items: center;\n}\n\n.hz-navbar .hz-navbar__progress-mask {\n  position: absolute;\n  top: 0;\n  right: 0;\n  bottom: 0;\n  left: 0;\n  z-index: 1;\n}\n\n.hz-navbar .hz-navbar__progress-bar {\n  height: 1.125em;\n  width: 75%;\n  position: relative;\n}\n\n.hz-navbar .hz-navbar__progress-value {\n  height: 100%;\n  transform: scaleX(0);\n  transform-origin: left;\n}\n\n.hz-navbar .hz-navbar__progress-percentage {\n  margin-left: 0.375em;\n}\n\n.hz-navbar .hz-navbar__actions {\n  display: flex;\n  width: 33.3%;\n  justify-content: center;\n}\n\n.hz-navbar .hz-navbar__actions .hz-navbar__btn {\n  margin: 0 0.375em;\n}\n\n.hz-navbar .hz-navbar__pager {\n  display: flex;\n  align-items: center;\n  width: 33.3%;\n  justify-content: flex-end;\n}\n\n.hz-navbar .hz-navbar__pages {\n  padding: 0 0.375em;\n}\n\n.hz-navbar .hz-navbar__total:before {\n  content: \"/\";\n}\n\n.ui-dialog.hz-navbar__dialog {\n  position: absolute;\n  top: 0;\n  left: 0;\n  max-height: calc(100vh - 1.25em);\n  display: flex;\n  flex-direction: column;\n  margin-top: 0.625em;\n  margin-bottom: 0.625em;\n  background-color: #fff;\n}\n\n.ui-dialog.hz-navbar__dialog .hz-navbar__dialog__body {\n  padding: 0.875em;\n  overflow: auto;\n}\n\n.ui-dialog.hz-navbar__dialog .hz-navbar__index-item:not(:first-child) {\n  margin-top: 0.375em;\n}\n\n.ui-widget-overlay {\n  background-color: rgba(0, 0, 0, 0.25);\n}\n\n/* End _hz-navbar.structure */\n.hz-navbar {\n  background-color: rgba(0, 0, 0, 0.5);\n}\n\n.hz-navbar .hz-navbar__progress-percentage {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__btn {\n  transition: all 400ms ease;\n}\n\n.hz-navbar .hz-navbar__btn .hz-navbar__content {\n  position: absolute;\n  top: 0;\n  left: -99999em;\n}\n\n.hz-navbar .hz-navbar__btn:not([disabled]):not(.hz-navbar__btn--disabled):hover, .hz-navbar .hz-navbar__btn:not([disabled]):not(.hz-navbar__btn--disabled):focus {\n  transform: scale(1.2);\n}\n\n.hz-navbar .hz-navbar__btn[disabled]:after, .hz-navbar .hz-navbar__btn.hz-navbar__btn--disabled:after {\n  opacity: 0.5;\n  cursor: default;\n}\n\n.hz-navbar .hz-navbar__progress-bar {\n  border: 2px solid none;\n  background-color: #999;\n}\n\n.hz-navbar .hz-navbar__progress-value {\n  transition: all 400ms ease;\n  background-color: #ddd;\n}\n\n.hz-navbar .hz-navbar__actions .hz-navbar__btn {\n  font-size: 1em;\n}\n\n.hz-navbar .hz-navbar__actions .hz-navbar__btn:after {\n  transition: all 400ms ease;\n  font-family: FontAwesome;\n  font-size: 1.75em;\n}\n\n.hz-navbar .hz-navbar__action-home {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-home:not([disabled]):hover, .hz-navbar .hz-navbar__action-home:not([disabled]):focus {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-home:not([disabled]):hover:after, .hz-navbar .hz-navbar__action-home:not([disabled]):focus:after {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-home:after {\n  content: \"\\f015\";\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index:not([disabled]):hover, .hz-navbar .hz-navbar__action-index:not([disabled]):focus {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index:not([disabled]):hover:after, .hz-navbar .hz-navbar__action-index:not([disabled]):focus:after {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-index:after {\n  content: \"\\f0ca\";\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-exit {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-exit:not([disabled]):hover, .hz-navbar .hz-navbar__action-exit:not([disabled]):focus {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-exit:not([disabled]):hover:after, .hz-navbar .hz-navbar__action-exit:not([disabled]):focus:after {\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__action-exit:after {\n  content: \"\\f08b\";\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn {\n  display: flex;\n  flex-direction: row;\n  align-items: center;\n  color: #fff;\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn:after {\n  font-family: FontAwesome;\n  font-size: 1.875em;\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn.hz-navbar__prev:after {\n  content: \"\\f053\";\n}\n\n.hz-navbar .hz-navbar__pager .hz-navbar__btn.hz-navbar__next:after {\n  content: \"\\f054\";\n}\n\n.hz-navbar .hz-navbar__pages {\n  color: #fff;\n}\n\n.ui-dialog.hz-navbar__dialog {\n  padding: 0;\n  box-shadow: 0 4px 5px 0 rgba(0, 0, 0, 0.14), 0 1px 10px 0 rgba(0, 0, 0, 0.12), 0 2px 4px -1px rgba(0, 0, 0, 0.2);\n}\n\n.ui-dialog.hz-navbar__dialog .ui-dialog-titlebar {\n  background-color: #999;\n}\n\n.ui-dialog.hz-navbar__dialog .ui-dialog-titlebar-close {\n  font-size: 0;\n  background: none;\n  border: none;\n  cursor: pointer;\n}\n\n.ui-dialog.hz-navbar__dialog .ui-dialog-titlebar-close:after {\n  content: \"\\f00d\";\n  font-size: 1rem;\n  color: #fff;\n  font-family: \"FontAwesome\";\n}\n\n.ui-dialog.hz-navbar__dialog .hz-navbar__index-item .hz-navbar__index-item-content {\n  color: #666;\n  cursor: default;\n}\n\n.ui-dialog.hz-navbar__dialog .hz-navbar__index-item.hz-navbar__page--completed .hz-navbar__index-item-content {\n  color: #999;\n  cursor: pointer;\n}\n\n.ui-dialog.hz-navbar__dialog .hz-navbar__index-item.hz-navbar__page--visited .hz-navbar__index-item-content,\n.ui-dialog.hz-navbar__dialog .hz-navbar__index-item.hz-navbar__page--completed + .hz-navbar__index-item .hz-navbar__index-item-content {\n  color: #333;\n  cursor: pointer;\n}\n\n/* End _hz-navbar.theme-default */\n/* End components */\n\n/*# sourceMappingURL=main.scss.map */");
 });
 ___scope___.file("sco1221/markdown.scss", function(exports, require, module, __filename, __dirname){
 
-__fsbx_css("sco1221/markdown.scss", "/*\r\nThis document has been created with Marked.app <http://marked2app.com>, Copyright 2013 Brett Terpstra\r\nContent is property of the document author\r\nPlease leave this notice in place, along with any additional credits below.\r\n---------------------------------------------------------------\r\nTitle: GitHub\r\nAuthor: Brett Terpstra\r\nDescription: Github README style. Includes theme for Pygmentized code blocks.\r\n*/\nhtml, body {\n  color: black;\n}\n\n*:not('#mkdbuttons') {\n  margin: 0;\n  padding: 0;\n}\n\n.markdown-wrapper {\n  font: 15px helvetica, arial, freesans, clean, sans-serif;\n  -webkit-font-smoothing: antialiased;\n  line-height: 1.7;\n  padding: 3px;\n  background: #fff;\n  border-radius: 3px;\n  -moz-border-radius: 3px;\n  -webkit-border-radius: 3px;\n  background-color: #fff;\n  padding: 30px;\n  margin: 15px;\n  font-size: 15px;\n  line-height: 1.6;\n}\n\n.markdown-wrapper ol {\n  list-style: decimal;\n}\n\n.markdown-wrapper p {\n  margin: 1em 0;\n}\n\n.markdown-wrapper a {\n  color: #4183c4;\n  text-decoration: none;\n}\n\n.markdown-wrapper > *:first-child {\n  margin-top: 0 !important;\n}\n\n.markdown-wrapper > *:last-child {\n  margin-bottom: 0 !important;\n}\n\n@media screen {\n  .markdown-wrapper .markdown-wrapper {\n    box-shadow: 0 0 0 1px #cacaca, 0 0 0 4px #eee;\n  }\n}\n\n.markdown-wrapper h1, .markdown-wrapper h2, .markdown-wrapper h3, .markdown-wrapper h4, .markdown-wrapper h5, .markdown-wrapper h6 {\n  font-weight: 700;\n  line-height: 1.7;\n  cursor: text;\n  position: relative;\n  margin: 1em 0 15px;\n  padding: 0;\n}\n\n.markdown-wrapper h1 {\n  font-size: 2.5em;\n  border-bottom: 1px solid #ddd;\n}\n\n.markdown-wrapper h2 {\n  font-size: 2em;\n  border-bottom: 1px solid #eee;\n}\n\n.markdown-wrapper h3 {\n  font-size: 1.5em;\n}\n\n.markdown-wrapper h4 {\n  font-size: 1.2em;\n}\n\n.markdown-wrapper h5 {\n  font-size: 1em;\n}\n\n.markdown-wrapper h6 {\n  color: #777;\n  font-size: 1em;\n}\n\n.markdown-wrapper p, .markdown-wrapper blockquote, .markdown-wrapper table, .markdown-wrapper pre {\n  margin: 15px 0;\n}\n\n.markdown-wrapper ul {\n  padding-left: 30px;\n}\n\n.markdown-wrapper ol {\n  padding-left: 30px;\n}\n\n.markdown-wrapper ol li ul:first-of-type {\n  margin-top: 0px;\n}\n\n.markdown-wrapper hr {\n  background: transparent url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAYAAAAECAYAAACtBE5DAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyJpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuMC1jMDYwIDYxLjEzNDc3NywgMjAxMC8wMi8xMi0xNzozMjowMCAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIENTNSBNYWNpbnRvc2giIHhtcE1NOkluc3RhbmNlSUQ9InhtcC5paWQ6OENDRjNBN0E2NTZBMTFFMEI3QjRBODM4NzJDMjlGNDgiIHhtcE1NOkRvY3VtZW50SUQ9InhtcC5kaWQ6OENDRjNBN0I2NTZBMTFFMEI3QjRBODM4NzJDMjlGNDgiPiA8eG1wTU06RGVyaXZlZEZyb20gc3RSZWY6aW5zdGFuY2VJRD0ieG1wLmlpZDo4Q0NGM0E3ODY1NkExMUUwQjdCNEE4Mzg3MkMyOUY0OCIgc3RSZWY6ZG9jdW1lbnRJRD0ieG1wLmRpZDo4Q0NGM0E3OTY1NkExMUUwQjdCNEE4Mzg3MkMyOUY0OCIvPiA8L3JkZjpEZXNjcmlwdGlvbj4gPC9yZGY6UkRGPiA8L3g6eG1wbWV0YT4gPD94cGFja2V0IGVuZD0iciI/PqqezsUAAAAfSURBVHjaYmRABcYwBiM2QSA4y4hNEKYDQxAEAAIMAHNGAzhkPOlYAAAAAElFTkSuQmCC) repeat-x 0 0;\n  border: 0 none;\n  color: #ccc;\n  height: 4px;\n  margin: 15px 0;\n  padding: 0;\n}\n\n.markdown-wrapper > h2:first-child {\n  margin-top: 0;\n  padding-top: 0;\n}\n\n.markdown-wrapper > h1:first-child {\n  margin-top: 0;\n  padding-top: 0;\n}\n\n.markdown-wrapper > h1:first-child + h2 {\n  margin-top: 0;\n  padding-top: 0;\n}\n\n.markdown-wrapper > h3:first-child, .markdown-wrapper > h4:first-child, .markdown-wrapper > h5:first-child, .markdown-wrapper > h6:first-child {\n  margin-top: 0;\n  padding-top: 0;\n}\n\n.markdown-wrapper a:first-child h1, .markdown-wrapper a:first-child h2, .markdown-wrapper a:first-child h3, .markdown-wrapper a:first-child h4, .markdown-wrapper a:first-child h5, .markdown-wrapper a:first-child h6 {\n  margin-top: 0;\n  padding-top: 0;\n}\n\n.markdown-wrapper h1 + p, .markdown-wrapper h2 + p, .markdown-wrapper h3 + p, .markdown-wrapper h4 + p, .markdown-wrapper h5 + p, .markdown-wrapper h6 + p, .markdown-wrapper ul li > :first-child, .markdown-wrapper ol li > :first-child {\n  margin-top: 0;\n}\n\n.markdown-wrapper dl {\n  padding: 0;\n}\n\n.markdown-wrapper dl dt {\n  font-size: 14px;\n  font-weight: bold;\n  font-style: italic;\n  padding: 0;\n  margin: 15px 0 5px;\n}\n\n.markdown-wrapper dl dt:first-child {\n  padding: 0;\n}\n\n.markdown-wrapper dl dt > :first-child {\n  margin-top: 0;\n}\n\n.markdown-wrapper dl dt > :last-child {\n  margin-bottom: 0;\n}\n\n.markdown-wrapper dl dd {\n  margin: 0 0 15px;\n  padding: 0 15px;\n}\n\n.markdown-wrapper dl dd > :first-child {\n  margin-top: 0;\n}\n\n.markdown-wrapper dl dd > :last-child {\n  margin-bottom: 0;\n}\n\n.markdown-wrapper blockquote {\n  border-left: 4px solid #ddd;\n  padding: 0 15px;\n  color: #777;\n}\n\n.markdown-wrapper blockquote > :first-child {\n  margin-top: 0;\n}\n\n.markdown-wrapper blockquote > :last-child {\n  margin-bottom: 0;\n}\n\n.markdown-wrapper table {\n  border-collapse: collapse;\n  border-spacing: 0;\n  font-size: 100%;\n  font: inherit;\n}\n\n.markdown-wrapper table th {\n  font-weight: bold;\n  border: 1px solid #ccc;\n  padding: 6px 13px;\n}\n\n.markdown-wrapper table td {\n  border: 1px solid #ccc;\n  padding: 6px 13px;\n}\n\n.markdown-wrapper table tr {\n  border-top: 1px solid #ccc;\n  background-color: #fff;\n}\n\n.markdown-wrapper table tr:nth-child(2n) {\n  background-color: #f8f8f8;\n}\n\n.markdown-wrapper img {\n  max-width: 100%;\n}\n\n.markdown-wrapper code, .markdown-wrapper tt {\n  margin: 0 2px;\n  padding: 0 5px;\n  white-space: nowrap;\n  border: 1px solid #eaeaea;\n  background-color: #f8f8f8;\n  border-radius: 3px;\n  font-family: Consolas, 'Liberation Mono', Courier, monospace;\n  font-size: 12px;\n  color: #333333;\n}\n\n.markdown-wrapper pre > code {\n  margin: 0;\n  padding: 0;\n  white-space: pre;\n  border: none;\n  background: transparent;\n}\n\n.markdown-wrapper .highlight pre {\n  background-color: #f8f8f8;\n  border: 1px solid #ccc;\n  font-size: 13px;\n  line-height: 19px;\n  overflow: auto;\n  padding: 6px 10px;\n  border-radius: 3px;\n}\n\n.markdown-wrapper pre {\n  background-color: #f8f8f8;\n  border: 1px solid #ccc;\n  font-size: 14px;\n  line-height: 19px;\n  overflow: auto;\n  padding: 6px 10px;\n  border-radius: 3px;\n  margin: 26px 0;\n}\n\n.markdown-wrapper pre code, .markdown-wrapper pre tt {\n  background-color: transparent;\n  border: none;\n}\n\n.markdown-wrapper .poetry pre {\n  font-family: Georgia, Garamond, serif !important;\n  font-style: italic;\n  font-size: 110% !important;\n  line-height: 1.6em;\n  display: block;\n  margin-left: 1em;\n}\n\n.markdown-wrapper .poetry pre code {\n  font-family: Georgia, Garamond, serif !important;\n  word-break: break-all;\n  word-break: break-word;\n  /* Non standard for webkit */\n  -webkit-hyphens: auto;\n  -moz-hyphens: auto;\n  hyphens: auto;\n  white-space: pre-wrap;\n}\n\n.markdown-wrapper sup, .markdown-wrapper sub, .markdown-wrapper a.footnote {\n  font-size: 1.4ex;\n  height: 0;\n  line-height: 1;\n  vertical-align: super;\n  position: relative;\n}\n\n.markdown-wrapper sub {\n  vertical-align: sub;\n  top: -1px;\n}\n\n.markdown-wrapper .highlight .c {\n  color: #998;\n  font-style: italic;\n}\n\n.markdown-wrapper .highlight .err {\n  color: #a61717;\n  background-color: #e3d2d2;\n}\n\n.markdown-wrapper .highlight .k, .markdown-wrapper .highlight .o {\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .cm {\n  color: #998;\n  font-style: italic;\n}\n\n.markdown-wrapper .highlight .cp {\n  color: #999;\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .c1 {\n  color: #998;\n  font-style: italic;\n}\n\n.markdown-wrapper .highlight .cs {\n  color: #999;\n  font-weight: bold;\n  font-style: italic;\n}\n\n.markdown-wrapper .highlight .gd {\n  color: #000;\n  background-color: #fdd;\n}\n\n.markdown-wrapper .highlight .gd .x {\n  color: #000;\n  background-color: #faa;\n}\n\n.markdown-wrapper .highlight .ge {\n  font-style: italic;\n}\n\n.markdown-wrapper .highlight .gr {\n  color: #a00;\n}\n\n.markdown-wrapper .highlight .gh {\n  color: #999;\n}\n\n.markdown-wrapper .highlight .gi {\n  color: #000;\n  background-color: #dfd;\n}\n\n.markdown-wrapper .highlight .gi .x {\n  color: #000;\n  background-color: #afa;\n}\n\n.markdown-wrapper .highlight .go {\n  color: #888;\n}\n\n.markdown-wrapper .highlight .gp {\n  color: #555;\n}\n\n.markdown-wrapper .highlight .gs {\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .gu {\n  color: #800080;\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .gt {\n  color: #a00;\n}\n\n.markdown-wrapper .highlight .kc, .markdown-wrapper .highlight .kd, .markdown-wrapper .highlight .kn, .markdown-wrapper .highlight .kp, .markdown-wrapper .highlight .kr {\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .kt {\n  color: #458;\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .m {\n  color: #099;\n}\n\n.markdown-wrapper .highlight .s {\n  color: #d14;\n}\n\n.markdown-wrapper .highlight .na {\n  color: #008080;\n}\n\n.markdown-wrapper .highlight .nb {\n  color: #0086b3;\n}\n\n.markdown-wrapper .highlight .nc {\n  color: #458;\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .no {\n  color: #008080;\n}\n\n.markdown-wrapper .highlight .ni {\n  color: #800080;\n}\n\n.markdown-wrapper .highlight .ne, .markdown-wrapper .highlight .nf {\n  color: #900;\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .nn {\n  color: #555;\n}\n\n.markdown-wrapper .highlight .nt {\n  color: #000080;\n}\n\n.markdown-wrapper .highlight .nv {\n  color: #008080;\n}\n\n.markdown-wrapper .highlight .ow {\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .w {\n  color: #bbb;\n}\n\n.markdown-wrapper .highlight .mf, .markdown-wrapper .highlight .mh, .markdown-wrapper .highlight .mi, .markdown-wrapper .highlight .mo {\n  color: #099;\n}\n\n.markdown-wrapper .highlight .sb, .markdown-wrapper .highlight .sc, .markdown-wrapper .highlight .sd, .markdown-wrapper .highlight .s2, .markdown-wrapper .highlight .se, .markdown-wrapper .highlight .sh, .markdown-wrapper .highlight .si, .markdown-wrapper .highlight .sx {\n  color: #d14;\n}\n\n.markdown-wrapper .highlight .sr {\n  color: #009926;\n}\n\n.markdown-wrapper .highlight .s1 {\n  color: #d14;\n}\n\n.markdown-wrapper .highlight .ss {\n  color: #990073;\n}\n\n.markdown-wrapper .highlight .bp {\n  color: #999;\n}\n\n.markdown-wrapper .highlight .vc, .markdown-wrapper .highlight .vg, .markdown-wrapper .highlight .vi {\n  color: #008080;\n}\n\n.markdown-wrapper .highlight .il {\n  color: #099;\n}\n\n.markdown-wrapper .highlight .gc {\n  color: #999;\n  background-color: #eaf2f5;\n}\n\n.markdown-wrapper .type-csharp .highlight .k, .markdown-wrapper .type-csharp .highlight .kt {\n  color: #00f;\n}\n\n.markdown-wrapper .type-csharp .highlight .nf {\n  color: #000;\n  font-weight: normal;\n}\n\n.markdown-wrapper .type-csharp .highlight .nc {\n  color: #2b91af;\n}\n\n.markdown-wrapper .type-csharp .highlight .nn {\n  color: #000;\n}\n\n.markdown-wrapper .type-csharp .highlight .s, .markdown-wrapper .type-csharp .highlight .sc {\n  color: #a31515;\n}\n\n@media print {\n  body {\n    background: #fff;\n  }\n  img, pre, blockquote, table, figure {\n    page-break-inside: avoid;\n  }\n  .markdown-wrapper {\n    background: #fff;\n    border: none;\n  }\n  pre code {\n    overflow: visible;\n  }\n}\n\n@media screen {\n  body.inverted {\n    color: #eee !important;\n    border-color: #555;\n    box-shadow: none;\n  }\n  .inverted .markdown-wrapper, .inverted hr, .inverted p, .inverted td, .inverted li, .inverted h1, .inverted h2, .inverted h3, .inverted h4, .inverted h5, .inverted h6, .inverted th, .inverted .math, .inverted caption, .inverted dd, .inverted dt, .inverted blockquote {\n    color: #eee !important;\n    border-color: #555;\n    box-shadow: none;\n  }\n  .inverted td, .inverted th {\n    background: #333;\n  }\n  .inverted pre, .inverted code, .inverted tt {\n    background: #eeeeee !important;\n    color: #111;\n  }\n  .inverted h2 {\n    border-color: #555555;\n  }\n  .inverted hr {\n    border-color: #777;\n    border-width: 1px !important;\n  }\n  ::selection {\n    background: rgba(157, 193, 200, 0.5);\n  }\n  h1::selection {\n    background-color: rgba(45, 156, 208, 0.3);\n  }\n  h2::selection {\n    background-color: rgba(90, 182, 224, 0.3);\n  }\n  h3::selection, h4::selection, h5::selection, h6::selection, li::selection, ol::selection {\n    background-color: rgba(133, 201, 232, 0.3);\n  }\n  code::selection {\n    background-color: rgba(0, 0, 0, 0.7);\n    color: #eeeeee;\n  }\n  code span::selection {\n    background-color: rgba(0, 0, 0, 0.7) !important;\n    color: #eeeeee !important;\n  }\n  a::selection {\n    background-color: rgba(255, 230, 102, 0.2);\n  }\n  .inverted a::selection {\n    background-color: rgba(255, 230, 102, 0.6);\n  }\n  td::selection, th::selection, caption::selection {\n    background-color: rgba(180, 237, 95, 0.5);\n  }\n  .inverted {\n    background: #0b2531;\n    background: #252a2a;\n  }\n  .inverted .markdown-wrapper {\n    background: #252a2a;\n  }\n  .inverted a {\n    color: #acd1d5;\n  }\n}\n\nbody.dark .markdown-wrapper {\n  background: transparent !important;\n  box-shadow: none !important;\n}\n\n/*# sourceMappingURL=markdown.scss.map */");
+__fsbx_css("sco1221/markdown.scss", "/*\r\nThis document has been created with Marked.app <http://marked2app.com>, Copyright 2013 Brett Terpstra\r\nContent is property of the document author\r\nPlease leave this notice in place, along with any additional credits below.\r\n---------------------------------------------------------------\r\nTitle: GitHub\r\nAuthor: Brett Terpstra\r\nDescription: Github README style. Includes theme for Pygmentized code blocks.\r\n*/\nhtml, body {\n  color: black;\n}\n\n.markdown-wrapper {\n  font: 15px helvetica, arial, freesans, clean, sans-serif;\n  -webkit-font-smoothing: antialiased;\n  line-height: 1.7;\n  padding: 3px;\n  background: #fff;\n  border-radius: 3px;\n  -moz-border-radius: 3px;\n  -webkit-border-radius: 3px;\n  background-color: #fff;\n  padding: 30px;\n  margin: 15px;\n  font-size: 15px;\n  line-height: 1.6;\n}\n\n.markdown-wrapper ol {\n  list-style: decimal;\n}\n\n.markdown-wrapper p {\n  margin: 1em 0;\n}\n\n.markdown-wrapper a {\n  color: #4183c4;\n  text-decoration: none;\n}\n\n.markdown-wrapper > *:first-child {\n  margin-top: 0 !important;\n}\n\n.markdown-wrapper > *:last-child {\n  margin-bottom: 0 !important;\n}\n\n@media screen {\n  .markdown-wrapper .markdown-wrapper {\n    box-shadow: 0 0 0 1px #cacaca, 0 0 0 4px #eee;\n  }\n}\n\n.markdown-wrapper h1, .markdown-wrapper h2, .markdown-wrapper h3, .markdown-wrapper h4, .markdown-wrapper h5, .markdown-wrapper h6 {\n  font-weight: 700;\n  line-height: 1.7;\n  cursor: text;\n  position: relative;\n  margin: 1em 0 15px;\n  padding: 0;\n}\n\n.markdown-wrapper h1 {\n  font-size: 2.5em;\n  border-bottom: 1px solid #ddd;\n}\n\n.markdown-wrapper h2 {\n  font-size: 2em;\n  border-bottom: 1px solid #eee;\n}\n\n.markdown-wrapper h3 {\n  font-size: 1.5em;\n}\n\n.markdown-wrapper h4 {\n  font-size: 1.2em;\n}\n\n.markdown-wrapper h5 {\n  font-size: 1em;\n}\n\n.markdown-wrapper h6 {\n  color: #777;\n  font-size: 1em;\n}\n\n.markdown-wrapper p, .markdown-wrapper blockquote, .markdown-wrapper table, .markdown-wrapper pre {\n  margin: 15px 0;\n}\n\n.markdown-wrapper ul {\n  padding-left: 30px;\n}\n\n.markdown-wrapper ol {\n  padding-left: 30px;\n}\n\n.markdown-wrapper ol li ul:first-of-type {\n  margin-top: 0px;\n}\n\n.markdown-wrapper hr {\n  background: transparent url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAYAAAAECAYAAACtBE5DAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyJpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuMC1jMDYwIDYxLjEzNDc3NywgMjAxMC8wMi8xMi0xNzozMjowMCAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIENTNSBNYWNpbnRvc2giIHhtcE1NOkluc3RhbmNlSUQ9InhtcC5paWQ6OENDRjNBN0E2NTZBMTFFMEI3QjRBODM4NzJDMjlGNDgiIHhtcE1NOkRvY3VtZW50SUQ9InhtcC5kaWQ6OENDRjNBN0I2NTZBMTFFMEI3QjRBODM4NzJDMjlGNDgiPiA8eG1wTU06RGVyaXZlZEZyb20gc3RSZWY6aW5zdGFuY2VJRD0ieG1wLmlpZDo4Q0NGM0E3ODY1NkExMUUwQjdCNEE4Mzg3MkMyOUY0OCIgc3RSZWY6ZG9jdW1lbnRJRD0ieG1wLmRpZDo4Q0NGM0E3OTY1NkExMUUwQjdCNEE4Mzg3MkMyOUY0OCIvPiA8L3JkZjpEZXNjcmlwdGlvbj4gPC9yZGY6UkRGPiA8L3g6eG1wbWV0YT4gPD94cGFja2V0IGVuZD0iciI/PqqezsUAAAAfSURBVHjaYmRABcYwBiM2QSA4y4hNEKYDQxAEAAIMAHNGAzhkPOlYAAAAAElFTkSuQmCC) repeat-x 0 0;\n  border: 0 none;\n  color: #ccc;\n  height: 4px;\n  margin: 15px 0;\n  padding: 0;\n}\n\n.markdown-wrapper > h2:first-child {\n  margin-top: 0;\n  padding-top: 0;\n}\n\n.markdown-wrapper > h1:first-child {\n  margin-top: 0;\n  padding-top: 0;\n}\n\n.markdown-wrapper > h1:first-child + h2 {\n  margin-top: 0;\n  padding-top: 0;\n}\n\n.markdown-wrapper > h3:first-child, .markdown-wrapper > h4:first-child, .markdown-wrapper > h5:first-child, .markdown-wrapper > h6:first-child {\n  margin-top: 0;\n  padding-top: 0;\n}\n\n.markdown-wrapper a:first-child h1, .markdown-wrapper a:first-child h2, .markdown-wrapper a:first-child h3, .markdown-wrapper a:first-child h4, .markdown-wrapper a:first-child h5, .markdown-wrapper a:first-child h6 {\n  margin-top: 0;\n  padding-top: 0;\n}\n\n.markdown-wrapper h1 + p, .markdown-wrapper h2 + p, .markdown-wrapper h3 + p, .markdown-wrapper h4 + p, .markdown-wrapper h5 + p, .markdown-wrapper h6 + p, .markdown-wrapper ul li > :first-child, .markdown-wrapper ol li > :first-child {\n  margin-top: 0;\n}\n\n.markdown-wrapper dl {\n  padding: 0;\n}\n\n.markdown-wrapper dl dt {\n  font-size: 14px;\n  font-weight: bold;\n  font-style: italic;\n  padding: 0;\n  margin: 15px 0 5px;\n}\n\n.markdown-wrapper dl dt:first-child {\n  padding: 0;\n}\n\n.markdown-wrapper dl dt > :first-child {\n  margin-top: 0;\n}\n\n.markdown-wrapper dl dt > :last-child {\n  margin-bottom: 0;\n}\n\n.markdown-wrapper dl dd {\n  margin: 0 0 15px;\n  padding: 0 15px;\n}\n\n.markdown-wrapper dl dd > :first-child {\n  margin-top: 0;\n}\n\n.markdown-wrapper dl dd > :last-child {\n  margin-bottom: 0;\n}\n\n.markdown-wrapper blockquote {\n  border-left: 4px solid #ddd;\n  padding: 0 15px;\n  color: #777;\n}\n\n.markdown-wrapper blockquote > :first-child {\n  margin-top: 0;\n}\n\n.markdown-wrapper blockquote > :last-child {\n  margin-bottom: 0;\n}\n\n.markdown-wrapper table {\n  border-collapse: collapse;\n  border-spacing: 0;\n  font-size: 100%;\n  font: inherit;\n}\n\n.markdown-wrapper table th {\n  font-weight: bold;\n  border: 1px solid #ccc;\n  padding: 6px 13px;\n}\n\n.markdown-wrapper table td {\n  border: 1px solid #ccc;\n  padding: 6px 13px;\n}\n\n.markdown-wrapper table tr {\n  border-top: 1px solid #ccc;\n  background-color: #fff;\n}\n\n.markdown-wrapper table tr:nth-child(2n) {\n  background-color: #f8f8f8;\n}\n\n.markdown-wrapper img {\n  max-width: 100%;\n}\n\n.markdown-wrapper code, .markdown-wrapper tt {\n  margin: 0 2px;\n  padding: 0 5px;\n  white-space: nowrap;\n  border: 1px solid #eaeaea;\n  background-color: #f8f8f8;\n  border-radius: 3px;\n  font-family: Consolas, 'Liberation Mono', Courier, monospace;\n  font-size: 12px;\n  color: #333333;\n}\n\n.markdown-wrapper pre > code {\n  margin: 0;\n  padding: 0;\n  white-space: pre;\n  border: none;\n  background: transparent;\n}\n\n.markdown-wrapper .highlight pre {\n  background-color: #f8f8f8;\n  border: 1px solid #ccc;\n  font-size: 13px;\n  line-height: 19px;\n  overflow: auto;\n  padding: 6px 10px;\n  border-radius: 3px;\n}\n\n.markdown-wrapper pre {\n  background-color: #f8f8f8;\n  border: 1px solid #ccc;\n  font-size: 14px;\n  line-height: 19px;\n  overflow: auto;\n  padding: 6px 10px;\n  border-radius: 3px;\n  margin: 26px 0;\n}\n\n.markdown-wrapper pre code, .markdown-wrapper pre tt {\n  background-color: transparent;\n  border: none;\n}\n\n.markdown-wrapper .poetry pre {\n  font-family: Georgia, Garamond, serif !important;\n  font-style: italic;\n  font-size: 110% !important;\n  line-height: 1.6em;\n  display: block;\n  margin-left: 1em;\n}\n\n.markdown-wrapper .poetry pre code {\n  font-family: Georgia, Garamond, serif !important;\n  word-break: break-all;\n  word-break: break-word;\n  /* Non standard for webkit */\n  -webkit-hyphens: auto;\n  -moz-hyphens: auto;\n  hyphens: auto;\n  white-space: pre-wrap;\n}\n\n.markdown-wrapper sup, .markdown-wrapper sub, .markdown-wrapper a.footnote {\n  font-size: 1.4ex;\n  height: 0;\n  line-height: 1;\n  vertical-align: super;\n  position: relative;\n}\n\n.markdown-wrapper sub {\n  vertical-align: sub;\n  top: -1px;\n}\n\n.markdown-wrapper .highlight .c {\n  color: #998;\n  font-style: italic;\n}\n\n.markdown-wrapper .highlight .err {\n  color: #a61717;\n  background-color: #e3d2d2;\n}\n\n.markdown-wrapper .highlight .k, .markdown-wrapper .highlight .o {\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .cm {\n  color: #998;\n  font-style: italic;\n}\n\n.markdown-wrapper .highlight .cp {\n  color: #999;\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .c1 {\n  color: #998;\n  font-style: italic;\n}\n\n.markdown-wrapper .highlight .cs {\n  color: #999;\n  font-weight: bold;\n  font-style: italic;\n}\n\n.markdown-wrapper .highlight .gd {\n  color: #000;\n  background-color: #fdd;\n}\n\n.markdown-wrapper .highlight .gd .x {\n  color: #000;\n  background-color: #faa;\n}\n\n.markdown-wrapper .highlight .ge {\n  font-style: italic;\n}\n\n.markdown-wrapper .highlight .gr {\n  color: #a00;\n}\n\n.markdown-wrapper .highlight .gh {\n  color: #999;\n}\n\n.markdown-wrapper .highlight .gi {\n  color: #000;\n  background-color: #dfd;\n}\n\n.markdown-wrapper .highlight .gi .x {\n  color: #000;\n  background-color: #afa;\n}\n\n.markdown-wrapper .highlight .go {\n  color: #888;\n}\n\n.markdown-wrapper .highlight .gp {\n  color: #555;\n}\n\n.markdown-wrapper .highlight .gs {\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .gu {\n  color: #800080;\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .gt {\n  color: #a00;\n}\n\n.markdown-wrapper .highlight .kc, .markdown-wrapper .highlight .kd, .markdown-wrapper .highlight .kn, .markdown-wrapper .highlight .kp, .markdown-wrapper .highlight .kr {\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .kt {\n  color: #458;\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .m {\n  color: #099;\n}\n\n.markdown-wrapper .highlight .s {\n  color: #d14;\n}\n\n.markdown-wrapper .highlight .na {\n  color: #008080;\n}\n\n.markdown-wrapper .highlight .nb {\n  color: #0086b3;\n}\n\n.markdown-wrapper .highlight .nc {\n  color: #458;\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .no {\n  color: #008080;\n}\n\n.markdown-wrapper .highlight .ni {\n  color: #800080;\n}\n\n.markdown-wrapper .highlight .ne, .markdown-wrapper .highlight .nf {\n  color: #900;\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .nn {\n  color: #555;\n}\n\n.markdown-wrapper .highlight .nt {\n  color: #000080;\n}\n\n.markdown-wrapper .highlight .nv {\n  color: #008080;\n}\n\n.markdown-wrapper .highlight .ow {\n  font-weight: bold;\n}\n\n.markdown-wrapper .highlight .w {\n  color: #bbb;\n}\n\n.markdown-wrapper .highlight .mf, .markdown-wrapper .highlight .mh, .markdown-wrapper .highlight .mi, .markdown-wrapper .highlight .mo {\n  color: #099;\n}\n\n.markdown-wrapper .highlight .sb, .markdown-wrapper .highlight .sc, .markdown-wrapper .highlight .sd, .markdown-wrapper .highlight .s2, .markdown-wrapper .highlight .se, .markdown-wrapper .highlight .sh, .markdown-wrapper .highlight .si, .markdown-wrapper .highlight .sx {\n  color: #d14;\n}\n\n.markdown-wrapper .highlight .sr {\n  color: #009926;\n}\n\n.markdown-wrapper .highlight .s1 {\n  color: #d14;\n}\n\n.markdown-wrapper .highlight .ss {\n  color: #990073;\n}\n\n.markdown-wrapper .highlight .bp {\n  color: #999;\n}\n\n.markdown-wrapper .highlight .vc, .markdown-wrapper .highlight .vg, .markdown-wrapper .highlight .vi {\n  color: #008080;\n}\n\n.markdown-wrapper .highlight .il {\n  color: #099;\n}\n\n.markdown-wrapper .highlight .gc {\n  color: #999;\n  background-color: #eaf2f5;\n}\n\n.markdown-wrapper .type-csharp .highlight .k, .markdown-wrapper .type-csharp .highlight .kt {\n  color: #00f;\n}\n\n.markdown-wrapper .type-csharp .highlight .nf {\n  color: #000;\n  font-weight: normal;\n}\n\n.markdown-wrapper .type-csharp .highlight .nc {\n  color: #2b91af;\n}\n\n.markdown-wrapper .type-csharp .highlight .nn {\n  color: #000;\n}\n\n.markdown-wrapper .type-csharp .highlight .s, .markdown-wrapper .type-csharp .highlight .sc {\n  color: #a31515;\n}\n\n@media print {\n  body {\n    background: #fff;\n  }\n  img, pre, blockquote, table, figure {\n    page-break-inside: avoid;\n  }\n  .markdown-wrapper {\n    background: #fff;\n    border: none;\n  }\n  pre code {\n    overflow: visible;\n  }\n}\n\n@media screen {\n  body.inverted {\n    color: #eee !important;\n    border-color: #555;\n    box-shadow: none;\n  }\n  .inverted .markdown-wrapper, .inverted hr, .inverted p, .inverted td, .inverted li, .inverted h1, .inverted h2, .inverted h3, .inverted h4, .inverted h5, .inverted h6, .inverted th, .inverted .math, .inverted caption, .inverted dd, .inverted dt, .inverted blockquote {\n    color: #eee !important;\n    border-color: #555;\n    box-shadow: none;\n  }\n  .inverted td, .inverted th {\n    background: #333;\n  }\n  .inverted pre, .inverted code, .inverted tt {\n    background: #eeeeee !important;\n    color: #111;\n  }\n  .inverted h2 {\n    border-color: #555555;\n  }\n  .inverted hr {\n    border-color: #777;\n    border-width: 1px !important;\n  }\n  ::selection {\n    background: rgba(157, 193, 200, 0.5);\n  }\n  h1::selection {\n    background-color: rgba(45, 156, 208, 0.3);\n  }\n  h2::selection {\n    background-color: rgba(90, 182, 224, 0.3);\n  }\n  h3::selection, h4::selection, h5::selection, h6::selection, li::selection, ol::selection {\n    background-color: rgba(133, 201, 232, 0.3);\n  }\n  code::selection {\n    background-color: rgba(0, 0, 0, 0.7);\n    color: #eeeeee;\n  }\n  code span::selection {\n    background-color: rgba(0, 0, 0, 0.7) !important;\n    color: #eeeeee !important;\n  }\n  a::selection {\n    background-color: rgba(255, 230, 102, 0.2);\n  }\n  .inverted a::selection {\n    background-color: rgba(255, 230, 102, 0.6);\n  }\n  td::selection, th::selection, caption::selection {\n    background-color: rgba(180, 237, 95, 0.5);\n  }\n  .inverted {\n    background: #0b2531;\n    background: #252a2a;\n  }\n  .inverted .markdown-wrapper {\n    background: #252a2a;\n  }\n  .inverted a {\n    color: #acd1d5;\n  }\n}\n\nbody.dark .markdown-wrapper {\n  background: transparent !important;\n  box-shadow: none !important;\n}\n\n/*# sourceMappingURL=markdown.scss.map */");
 });
 ___scope___.file("sco1221/prism-github.scss", function(exports, require, module, __filename, __dirname){
 
@@ -10541,6 +10776,9 @@ var HzLocutionRuntime = /** @class */ (function () {
     return HzLocutionRuntime;
 }());
 exports.HzLocutionRuntime = HzLocutionRuntime;
+var subtitle_1 = require("subtitle");
+var core_2 = require("@haztivity/core");
+var HzLocutionSubtitlesBarComponent_1 = require("./HzLocutionSubtitlesBarComponent");
 var HzLocutionResource = /** @class */ (function (_super) {
     __extends(HzLocutionResource, _super);
     /**
@@ -10555,34 +10793,106 @@ var HzLocutionResource = /** @class */ (function (_super) {
         _this._scormService = _scormService;
         _this._dataOptions = _dataOptions;
         _this._navigatorService = _navigatorService;
+        _this.subtitles = [];
         return _this;
     }
     HzLocutionResource_1 = HzLocutionResource;
     HzLocutionResource.prototype.init = function (options, config) {
+        var _this = this;
         this._options = this._$.extend(true, {}, HzLocutionResource_1.DEFAULTS, options);
+        this.id = this._options.id || this._$element.attr("id") || Date.now().toString();
         this._config = config;
         this._navigatorService.on(core_1.NavigatorService.ON_CHANGE_PAGE_START, this._onChangePageStart.bind(this));
-        var sound = new howler_1.Howl({
-            src: this._options.files.split(",")
+        this.initializationDefer = this._$.Deferred();
+        var subtitlesContainer = this._options.subtitlesContainer ? core_2.ScoFactory.getCurrentSco()._$context.find(this._options.subtitlesContainer) : core_1.$("<div></div>");
+        this.$subtitlesContainer = subtitlesContainer;
+        if (subtitlesContainer.data("hzComponentInstance") != null) {
+            this.subtitlesBarComponent = subtitlesContainer.data("hzComponentInstance");
+            this._options.subtitlesDisabled = this.subtitlesBarComponent.subtitlesDisabled;
+            this.subtitlesBarComponent.on(HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.NAMESPACE + this._id + "." + HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.ON_SUBTITLES_ENABLED, { instance: this }, this._onBarEnable);
+            this.subtitlesBarComponent.on(HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.NAMESPACE + this._id + "." + HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.ON_SUBTITLES_DISABLED, { instance: this }, this._onBarDisable);
+        }
+        var subtitlesPromise = this.processSubtitles();
+        subtitlesPromise.always(function () {
+            var sound = new howler_1.Howl({
+                src: _this._options.files.split(",")
+            });
+            sound.on('end', _this._onEnd.bind(_this));
+            sound.on("load", _this._onLoad.bind(_this));
+            sound.on("loaderror", _this._onLoadError.bind(_this));
+            sound.on("playerror", _this._onPlayError.bind(_this));
+            sound.on("play", _this._onPlay.bind(_this));
+            _this._sound = sound;
+            if (_this._options.subtitlesDisabled) {
+                _this.disableSubtitles();
+            }
+            else {
+                _this.enableSubtitles();
+            }
+            _this.initializationDefer.resolve();
         });
-        sound.on('end', this._onEnd.bind(this));
-        sound.on("load", this._onLoad.bind(this));
-        sound.on("loaderror", this._onLoadError.bind(this));
-        sound.on("playerror", this._onPlayError.bind(this));
-        sound.on("play", this._onPlay.bind(this));
-        this._sound = sound;
         if (this._options.playOn != "auto" && this._options.playOn != "none") {
             var config_1 = this._options.playOn, playOn = config_1.split(":"), event = playOn[0], target = playOn.length > 1 ? this._$(playOn[1]) : this._$element;
             target.on(event, { instance: this }, this._onTargetEvent);
         }
     };
+    Object.defineProperty(HzLocutionResource.prototype, "subtitlesDisabled", {
+        get: function () {
+            return this._options.subtitlesDisabled;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    HzLocutionResource.prototype.processSubtitles = function () {
+        var _this = this;
+        var subtitlesDeferred = this._$.Deferred();
+        if (this._options.subtitles) {
+            this._$.get(this._options.subtitles).then(function (content) {
+                try {
+                    _this.subtitles = subtitle_1.parse(content);
+                    if (_this.subtitles && _this.subtitles.length > 0) {
+                        _this._$element.addClass(HzLocutionResource_1.CLASS_HAS_SUBTITLES);
+                    }
+                    else {
+                        _this._$element.removeClass(HzLocutionResource_1.CLASS_HAS_SUBTITLES);
+                    }
+                    subtitlesDeferred.resolve();
+                }
+                catch (e) {
+                    console.error("Error parsing the vtt file " + _this._options.subtitles + ": " + content, e);
+                    _this._$element.removeClass(HzLocutionResource_1.CLASS_HAS_SUBTITLES);
+                    subtitlesDeferred.reject();
+                }
+            }).catch(function (err) {
+                console.error("Error downloading the vtt file " + _this._options.subtitles, err);
+                _this._$element.removeClass(HzLocutionResource_1.CLASS_HAS_SUBTITLES);
+                subtitlesDeferred.reject();
+            });
+        }
+        else {
+            this._$element.removeClass(HzLocutionResource_1.CLASS_HAS_SUBTITLES);
+            subtitlesDeferred.resolve();
+        }
+        return subtitlesDeferred.promise();
+    };
+    HzLocutionResource.prototype._onBarEnable = function (e) {
+        var instance = e.data.instance;
+        instance.enable();
+    };
+    HzLocutionResource.prototype._onBarDisable = function (e) {
+        var instance = e.data.instance;
+        instance.disable();
+    };
     HzLocutionResource.prototype._onTargetEvent = function (e) {
         var instance = e.data.instance;
         instance._unlock();
         instance.enable();
-        instance.play();
+        instance.initializationDefer.always(function () {
+            instance.play();
+        });
     };
     HzLocutionResource.prototype._onEnd = function () {
+        this.stop();
         this._markAsCompleted();
         this._eventEmitter.trigger(HzLocutionResource_1.ON_END);
     };
@@ -10590,24 +10900,99 @@ var HzLocutionResource = /** @class */ (function (_super) {
         this._eventEmitter.trigger(HzLocutionResource_1.ON_LOADED);
     };
     HzLocutionResource.prototype._onLoadError = function (e, error) {
+        if (this._interval) {
+            clearInterval(this._interval);
+        }
         this._markAsCompleted();
         core_1.Logger.error("HzLocution", error);
         this._eventEmitter.trigger(HzLocutionResource_1.ON_LOAD_ERROR, error);
     };
     HzLocutionResource.prototype._onPlayError = function (e, error) {
+        if (this._interval) {
+            clearInterval(this._interval);
+        }
         this._markAsCompleted();
         core_1.Logger.error("HzLocution", arguments);
         this._eventEmitter.trigger(HzLocutionResource_1.ON_PLAY_ERROR);
     };
     HzLocutionResource.prototype._onPlay = function () {
+        this.registerSubtitlesInterval();
         this._eventEmitter.trigger(HzLocutionResource_1.ON_PLAY);
     };
     HzLocutionResource.prototype._onChangePageStart = function () {
-        this.stop();
+        var _this = this;
+        this.initializationDefer.always(function () {
+            _this.stop();
+        });
     };
     HzLocutionResource.prototype._onFinish = function () {
+        this.stop();
         if (!this.isCompleted()) {
             this._markAsCompleted();
+        }
+    };
+    HzLocutionResource.prototype.registerSubtitlesInterval = function () {
+        if (this.subtitles && !this.subtitlesDisabled && this._sound && this._sound.playing()) {
+            this.clearInterval();
+            this._interval = setInterval(this._onTimeInterval.bind(this), 100);
+        }
+    };
+    HzLocutionResource.prototype.clearInterval = function () {
+        if (this._interval) {
+            clearInterval(this._interval);
+            this._interval = null;
+        }
+    };
+    HzLocutionResource.prototype._onTimeInterval = function () {
+        this._syncSubtitles();
+    };
+    HzLocutionResource.prototype.updateSubtitlesContent = function (content) {
+        if (this._sound && this._sound.playing()) {
+            if (this.subtitlesBarComponent) {
+                this.subtitlesBarComponent.setContent(content);
+            }
+            else {
+                this.$subtitlesContainer.html(content);
+                if (content.trim().length > 0) {
+                    this.$subtitlesContainer.removeClass(HzLocutionResource_1.CLASS_SUBTITLES_EMPTY);
+                }
+                else {
+                    this.$subtitlesContainer.addClass(HzLocutionResource_1.CLASS_SUBTITLES_EMPTY);
+                }
+            }
+        }
+    };
+    HzLocutionResource.prototype.enableSubtitles = function () {
+        this._options.subtitlesDisabled = false;
+        this._$element.removeClass(HzLocutionResource_1.CLASS_SUBTITLES_DISABLED);
+        this.syncSubtitles();
+        this.registerSubtitlesInterval();
+    };
+    HzLocutionResource.prototype.disableSubtitles = function () {
+        this.clearInterval();
+        this._options.subtitlesDisabled = true;
+        this._$element.addClass(HzLocutionResource_1.CLASS_SUBTITLES_DISABLED);
+        this.currentSubtitle = null;
+        this.updateSubtitlesContent("");
+    };
+    HzLocutionResource.prototype.syncSubtitles = function () {
+        if (!this.subtitlesDisabled && this.subtitles) {
+            if (this._sound && this._sound.playing()) {
+                this._syncSubtitles();
+            }
+        }
+        else {
+            this.clearInterval();
+            this.updateSubtitlesContent("");
+        }
+    };
+    HzLocutionResource.prototype._syncSubtitles = function () {
+        var currentTime = this._sound.seek() * 1000;
+        var subtitlesForTime = this.subtitles.find(function (s) { return currentTime >= s.start && currentTime <= s.end; });
+        if (this.currentSubtitle != subtitlesForTime) {
+            this.updateSubtitlesContent(subtitlesForTime ? subtitlesForTime.text : "");
+            this.currentSubtitle = subtitlesForTime;
+            this._eventEmitter.trigger(HzLocutionResource_1.ON_CUE_CHANGE, subtitlesForTime);
         }
     };
     HzLocutionResource.prototype.play = function (force) {
@@ -10623,17 +11008,29 @@ var HzLocutionResource = /** @class */ (function (_super) {
                 HzLocutionRuntime.currentAudio.stop();
             }
             HzLocutionRuntime.currentAudio = this._sound;
-            if (this._options.delay) {
-                setTimeout(function () { return _this._sound.play(); }, this._options.delay);
-            }
-            else {
-                this._sound.play();
-            }
+            this.initializationDefer.always(function () {
+                if (_this.subtitles && !_this.subtitlesDisabled && _this.$subtitlesContainer) {
+                    _this.$subtitlesContainer.attr(HzLocutionResource_1.ATTR_SUBTITLES_BAR, _this.id);
+                }
+                if (_this._options.delay) {
+                    setTimeout(function () { return _this._sound.play(); }, _this._options.delay);
+                }
+                else {
+                    _this._sound.play();
+                }
+            });
         }
     };
     HzLocutionResource.prototype.stop = function () {
+        var _this = this;
         if (this._sound) {
-            this._sound.stop();
+            this.clearInterval();
+            this.initializationDefer.always(function () {
+                _this._sound.stop();
+            });
+            if (this.$subtitlesContainer) {
+                this.$subtitlesContainer.removeAttr(HzLocutionResource_1.ATTR_SUBTITLES_BAR);
+            }
             if (this._options.completeOnStop) {
                 this._markAsCompleted();
             }
@@ -10645,15 +11042,22 @@ var HzLocutionResource = /** @class */ (function (_super) {
         }
     };
     HzLocutionResource.prototype.enable = function () {
+        var _this = this;
         if (_super.prototype.enable.call(this)) {
-            if (this._options.playOn == "auto") {
-                this.play();
-            }
+            this.initializationDefer.always(function () {
+                if (_this._options.playOn == "auto") {
+                    _this.play();
+                }
+            });
         }
     };
     HzLocutionResource.prototype.destroy = function () {
         if (this._sound) {
             this._sound.unload();
+        }
+        if (this.subtitlesBarComponent) {
+            this.subtitlesBarComponent.off(HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.NAMESPACE + this._id + "." + HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.ON_SUBTITLES_ENABLED);
+            this.subtitlesBarComponent.off(HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.NAMESPACE + this._id + "." + HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.ON_SUBTITLES_DISABLED);
         }
         _super.prototype.destroy.call(this);
     };
@@ -10663,13 +11067,22 @@ var HzLocutionResource = /** @class */ (function (_super) {
     HzLocutionResource.ON_LOADED = HzLocutionResource_1.NAMESPACE + ":loaded";
     HzLocutionResource.ON_PLAY_ERROR = HzLocutionResource_1.NAMESPACE + ":playError";
     HzLocutionResource.ON_PLAY = HzLocutionResource_1.NAMESPACE + ":play";
+    HzLocutionResource.ON_CUE_CHANGE = HzLocutionResource_1.NAMESPACE + ":cueChange";
+    HzLocutionResource.ON_SUBTITLES_ENABLED = HzLocutionResource_1.NAMESPACE + ":subtitlesEnabled";
+    HzLocutionResource.ON_SUBTITLES_DISABLED = HzLocutionResource_1.NAMESPACE + ":subtitlesDisabled";
     HzLocutionResource.PREFIX = "hz-quiz";
-    HzLocutionResource.CLASS_COMPONENT = HzLocutionResource_1.PREFIX;
+    HzLocutionResource.CLASS_COMPONENT = "hz-locution";
+    HzLocutionResource.CLASS_HAS_SUBTITLES = "hz-locution--has-subtitles";
+    HzLocutionResource.CLASS_SUBTITLES_DISABLED = "hz-locution--subtitles-disabled";
+    HzLocutionResource.CLASS_SUBTITLES_EMPTY = "hz-locution--subtitles-empty";
+    HzLocutionResource.ATTR_SUBTITLES_BAR = "hz-locution-id";
     HzLocutionResource.DEFAULTS_QUIZ = {};
     HzLocutionResource.DEFAULTS = {
         playOn: "auto",
         completeOnPlay: false,
-        completeOnStop: false
+        completeOnStop: false,
+        subtitles: null,
+        subtitlesDisabled: false
     };
     HzLocutionResource = HzLocutionResource_1 = __decorate([
         core_1.Resource({
@@ -10819,9 +11232,64 @@ ___scope___.file("sco1221/pages/6614/page.pug", function(exports, require, modul
 
 module.exports.default =  "\n<div>\n  <h1>Audio when button is clicked</h1>\n  <button class=\"locutionTrigger\" data-hz-resource=\"HzAnim\" data-opt-hz-anim-on=\"click\" data-opt-hz-anim-do=\"transition.fadeIn\" data-opt-hz-anim-with=\"{&quot;duration&quot;:1000}\" data-opt-hz-anim-to=\".target\">Do to .target</button>\n  <p class=\"target\" data-hz-resource=\"HzLocution\" data-opt-hz-locution-files=\"./assets/long.mp3\" data-opt-hz-locution-play-on=\"click:.locutionTrigger\" style=\"display:none\">Here the text with locution</p>\n</div>";
 });
+___scope___.file("sco1221/pages/6615/page.js", function(exports, require, module, __filename, __dirname){
+
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+/**
+ * @license
+ * Copyright Davinchi. All Rights Reserved.
+ */
+var core_1 = require("@haztivity/core");
+var page_pug_1 = require("./page.pug");
+var HzLocution_1 = require("../../../resources/hz-locution/HzLocution");
+exports.page = core_1.PageFactory.createPage({
+    name: "6615",
+    resources: [
+        HzLocution_1.HzLocutionResource
+    ],
+    template: page_pug_1.default
+});
+exports.page.on(core_1.PageController.ON_RENDERING, null, function (eventObject, template, pageController) {
+    console.log(pageController.options.name + " rendering");
+});
+exports.page.on(core_1.PageController.ON_RENDERED, null, function (eventObject, $page, pageController) {
+    console.log(pageController.options.name + " rendered");
+    var toggle = $page.find("#toggle");
+    var locutions = $page.find(".locution");
+    toggle.on("click", function () {
+        locutions.each(function (i, l) {
+            var instance = $.data(l, "hzResourceInstance");
+            if (!instance.subtitlesDisabled) {
+                instance.disableSubtitles();
+            }
+            else {
+                instance.enableSubtitles();
+            }
+        });
+    });
+});
+exports.page.on(core_1.PageController.ON_SHOW, null, function (eventObject, $page, $oldPage, oldPageRelativePosition, pageController) {
+    console.log(pageController.options.name + " show start");
+});
+exports.page.on(core_1.PageController.ON_SHOWN, null, function (eventObject, $page, $oldPage, oldPageRelativePosition, pageController) {
+    console.log(pageController.options.name + " show end");
+});
+exports.page.on(core_1.PageController.ON_COMPLETE_CHANGE, null, function (eventObject, isCompleted, $page, pageController) {
+    console.log(pageController.options.name + " complete change");
+});
+exports.page.on(core_1.PageController.ON_DESTROY, null, function (eventObject, $page, pageController) {
+    console.log(pageController.options.name + " destroy");
+});
+//# sourceMappingURL=page.js.map
+});
+___scope___.file("sco1221/pages/6615/page.pug", function(exports, require, module, __filename, __dirname){
+
+module.exports.default =  "\n<div>\n  <h1 class=\"locution\" id=\"l1\" data-hz-resource=\"HzLocution\" data-opt-hz-locution-files=\"./assets/voice.mp3\" data-opt-hz-locution-subtitles=\"./assets/voice_es.vtt\" data-opt-hz-locution-subtitles-container=\"#6615-subtitles\">Test simple</h1>\n  <h1 class=\"locution\" data-hz-resource=\"HzLocution\" data-opt-hz-locution-files=\"./assets/long.mp3\" data-opt-hz-locution-subtitles=\"./assets/long_es.vtt\" data-opt-hz-locution-subtitles-container=\"#6615-subtitles\">Test simple 2</h1>\n  <div id=\"6615-subtitles\"></div>\n  <button id=\"toggle\">Toggle</button>\n</div>";
+});
 ___scope___.file("sco1221/sco.pug", function(exports, require, module, __filename, __dirname){
 
-module.exports.default =  "\n<div data-hz-pages=\"data-hz-pages\"></div>\n<div class=\"hz-navbar\" data-hz-component=\"HzNavbar\">\n  <div class=\"hz-navbar__progress\">\n    <div class=\"hz-navbar__progress-bar\">\n      <div class=\"hz-navbar__progress-mask\"></div>\n      <div class=\"hz-navbar__progress-value\" data-hz-navbar-bar=\"data-hz-navbar-bar\"></div>\n    </div>\n    <div class=\"hz-navbar__content hz-navbar__progress-percentage\" data-hz-navbar-progress=\"data-hz-navbar-progress\"></div>\n  </div>\n  <div class=\"hz-navbar__actions\">\n    <button class=\"hz-navbar__btn hz-navbar__action-home\" data-hz-navbar-home=\"data-hz-navbar-home\" data-hz-navbar-content=\"home\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"home\"></span></button>\n    <button class=\"hz-navbar__btn hz-navbar__action-index\" data-hz-navbar-index=\"data-hz-navbar-index\" data-hz-navbar-content=\"showIndex\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"showIndex\"></span></button>\n    <button class=\"hz-navbar__btn hz-navbar__action-exit\" data-hz-navbar-exit=\"data-hz-navbar-exit\" data-hz-navbar-content=\"exit\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"exit\"></span></button>\n  </div>\n  <div class=\"hz-navbar__pager\">\n    <button class=\"hz-navbar__btn hz-navbar__prev\" data-hz-navbar-prev=\"data-hz-navbar-prev\" data-hz-navbar-content=\"prev\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"prev\"></span></button>\n    <p class=\"hz-navbar__pages\"><span class=\"hz-navbar__content hz-navbar__current\" data-hz-navbar-current=\"data-hz-navbar-current\" data-hz-navbar-content-to=\"title\" data-hz-navbar-content=\"currentPage\"></span><span class=\"hz-navbar__content hz-navbar__total\" data-hz-navbar-total=\"data-hz-navbar-total\" data-hz-navbar-content-to=\"title\" data-hz-navbar-content=\"totalPages\"></span></p>\n    <button class=\"hz-navbar__btn hz-navbar__next\" data-hz-navbar-next=\"data-hz-navbar-next\" data-hz-navbar-content=\"next\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"next\"></span></button>\n  </div>\n  <ul class=\"hz-navbar__dialog hz-navbar__index-list\" data-hz-navbar-index-list=\"data-hz-navbar-index-list\">\n    <li class=\"hz-navbar__index-item\" data-hz-navbar-index-list-item=\"data-hz-navbar-index-list-item\"><a class=\"hz-navbar__index-item-content\" data-hz-navbar-index-list-item-content=\"data-hz-navbar-index-list-item-content\" href=\"javascript:void(0)\"></a></li>\n  </ul>\n  <div class=\"hz-navbar__dialog hz-navbar__exit-dialog\" data-hz-navbar-exit-dialog=\"data-hz-navbar-exit-dialog\">\n    <p data-hz-navbar-content=\"exitMessage\"></p>\n  </div>\n</div>";
+module.exports.default =  "\n<div data-hz-pages=\"data-hz-pages\"></div>\n<div class=\"hz-navbar\" data-hz-component=\"HzNavbar\">\n  <div class=\"hz-navbar__progress\">\n    <div class=\"hz-navbar__progress-bar\">\n      <div class=\"hz-navbar__progress-mask\"></div>\n      <div class=\"hz-navbar__progress-value\" data-hz-navbar-bar=\"data-hz-navbar-bar\"></div>\n    </div>\n    <div class=\"hz-navbar__content hz-navbar__progress-percentage\" data-hz-navbar-progress=\"data-hz-navbar-progress\"></div>\n  </div>\n  <div class=\"hz-navbar__actions\">\n    <button class=\"hz-navbar__btn hz-navbar__action-home\" data-hz-navbar-home=\"data-hz-navbar-home\" data-hz-navbar-content=\"home\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"home\"></span></button>\n    <button class=\"hz-navbar__btn hz-navbar__action-index\" data-hz-navbar-index=\"data-hz-navbar-index\" data-hz-navbar-content=\"showIndex\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"showIndex\"></span></button>\n    <button class=\"hz-navbar__btn hz-navbar__action-exit\" data-hz-navbar-exit=\"data-hz-navbar-exit\" data-hz-navbar-content=\"exit\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"exit\"></span></button>\n  </div>\n  <div class=\"hz-navbar__pager\">\n    <button class=\"hz-navbar__btn hz-navbar__prev\" data-hz-navbar-prev=\"data-hz-navbar-prev\" data-hz-navbar-content=\"prev\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"prev\"></span></button>\n    <p class=\"hz-navbar__pages\"><span class=\"hz-navbar__content hz-navbar__current\" data-hz-navbar-current=\"data-hz-navbar-current\" data-hz-navbar-content-to=\"title\" data-hz-navbar-content=\"currentPage\"></span><span class=\"hz-navbar__content hz-navbar__total\" data-hz-navbar-total=\"data-hz-navbar-total\" data-hz-navbar-content-to=\"title\" data-hz-navbar-content=\"totalPages\"></span></p>\n    <button class=\"hz-navbar__btn hz-navbar__next\" data-hz-navbar-next=\"data-hz-navbar-next\" data-hz-navbar-content=\"next\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"next\"></span></button>\n  </div>\n  <ul class=\"hz-navbar__dialog__body\" data-hz-navbar-index-list=\"data-hz-navbar-index-list\">\n    <li class=\"hz-navbar__index-item\" data-hz-navbar-index-list-item=\"data-hz-navbar-index-list-item\"><a class=\"hz-navbar__index-item-content\" data-hz-navbar-index-list-item-content=\"data-hz-navbar-index-list-item-content\" href=\"javascript:void(0)\"></a></li>\n  </ul>\n  <div class=\"hz-navbar__dialog__body\" data-hz-navbar-exit-dialog=\"data-hz-navbar-exit-dialog\">\n    <p data-hz-navbar-content=\"exitMessage\"></p>\n  </div>\n</div>";
 });
 });
 FuseBox.pkg("jquery", {}, function(___scope___){
@@ -10871,6 +11339,7 @@ exports.PageRegister = page_1.PageRegister;
 exports.PageFactory = page_1.PageFactory;
 exports.PageManager = page_1.PageManager;
 exports.GenericPageController = page_1.GenericPageController;
+exports.PageImplementation = page_1.PageImplementation;
 var resource_1 = require("./resource");
 exports.ResourceInitializerService = resource_1.ResourceInitializerService;
 exports.ResourceController = resource_1.ResourceController;
@@ -10879,6 +11348,7 @@ exports.ResourceSequenceFactory = resource_1.ResourceSequenceFactory;
 exports.ResourceSequence = resource_1.ResourceSequence;
 var navigator_1 = require("./navigator");
 exports.Navigator = navigator_1.Navigator;
+exports.NavigationMode = navigator_1.NavigationMode;
 exports.NavigatorService = navigator_1.NavigatorService;
 var component_1 = require("./component");
 exports.ComponentController = component_1.ComponentController;
@@ -10888,6 +11358,8 @@ var scorm_1 = require("./scorm");
 exports.ScormService = scorm_1.ScormService;
 var global_1 = require("./global");
 exports.haztivity = global_1.haztivity;
+var DevTools_1 = require("./devTools/DevTools");
+exports.DevTools = DevTools_1.DevTools;
 //# sourceMappingURL=index.js.map
 });
 ___scope___.file("dist/jquery.js", function(exports, require, module, __filename, __dirname){
@@ -13327,7 +13799,7 @@ var jquery_1 = require("../jquery");
 var PageController_1 = require("../page/PageController");
 var ScormService_1 = require("../scorm/ScormService");
 var ScoController = /** @class */ (function () {
-    function ScoController(_Navigator, _PageManager, _ResourceManager, _EventEmitterFactory, _ComponentManager, _ComponentInitializer, _$, _scormService) {
+    function ScoController(_Navigator, _PageManager, _ResourceManager, _EventEmitterFactory, _ComponentManager, _ComponentInitializer, _$, _scormService, _InjectorService) {
         this._Navigator = _Navigator;
         this._PageManager = _PageManager;
         this._ResourceManager = _ResourceManager;
@@ -13336,21 +13808,26 @@ var ScoController = /** @class */ (function () {
         this._ComponentInitializer = _ComponentInitializer;
         this._$ = _$;
         this._scormService = _scormService;
+        this._InjectorService = _InjectorService;
         this._eventEmitter = this._EventEmitterFactory.createEmitter();
     }
     ScoController_1 = ScoController;
     ScoController.prototype.activate = function (options) {
+        this._Navigator.setMode(options.navigationMode);
+        this._scormService.escapeSuspendData = options.escapeSuspendData;
         this._options = options;
+        this._scormService.doLMSInitialize();
+        this._options.autoSaveTime = this._options.autoSaveTime || 10;
         this._ComponentManager.addAll(this._options.components || []);
         this._PageManager.addPages(this._options.pages);
         this._restorePagesState();
         return this;
     };
     ScoController.prototype.on = function () {
+        this._eventEmitter.globalEmitter.on.apply(this, arguments);
         return this;
     };
     ScoController.prototype._init = function () {
-        this._$context = this._$("[data-hz-app]");
         //context must exists
         if (this._$context.length > 0) {
             this._$context.prepend(this._options.template);
@@ -13360,6 +13837,7 @@ var ScoController = /** @class */ (function () {
             this._$exit.detach();
             this._eventEmitter.globalEmitter.on(PageController_1.PageController.ON_COMPLETE_CHANGE, { instance: this }, this._onPageStateChange);
             this._eventEmitter.globalEmitter.on(PageController_1.PageController.ON_SHOWN, { instance: this }, this._onPageShown);
+            this._startAutoSaveTotalTime();
             //page contexts must exists
             if (this._$pagesContainer.length > 0) {
                 return true;
@@ -13368,9 +13846,26 @@ var ScoController = /** @class */ (function () {
                 throw new Errors_1.HaztivityPagesContextNotFound();
             }
         }
-        else {
-            throw new Errors_1.HaztivityAppContextNotFound();
+    };
+    ScoController.prototype._stopAutoSaveTotalTime = function () {
+        if (this._intervalTotalTime) {
+            clearInterval(this._intervalTotalTime);
         }
+    };
+    ScoController.prototype._startAutoSaveTotalTime = function () {
+        this._stopAutoSaveTotalTime();
+        var that = this;
+        this._intervalTotalTime = setInterval(function () {
+            that._saveTotalTime();
+        }, this._options.autoSaveTime * 60000);
+    };
+    ScoController.prototype._saveTotalTime = function (commit, suspendData) {
+        if (commit === void 0) { commit = true; }
+        if (!suspendData) {
+            suspendData = this._scormService.getSuspendData();
+        }
+        suspendData["%time"] = this.getTotalTimeFormatted(true);
+        this._scormService.setSuspendData(suspendData, commit);
     };
     ScoController.prototype._onPageShown = function (e, $page, $oldPage, oldPageRelativePosition, pageController) {
         var instance = e.data.instance;
@@ -13390,12 +13885,19 @@ var ScoController = /** @class */ (function () {
         return result;
     };
     ScoController.prototype._restorePagesState = function () {
-        this._scormService.doLMSInitialize();
         if (this._scormService.LMSIsInitialized()) {
             var count = this._scormService.doLMSGetValue("cmi.objectives._count"), lessonStatus = this._scormService.doLMSGetValue("cmi.core.lesson_status");
             if (lessonStatus == "not attempted") {
                 this._scormService.doLMSSetValue("cmi.core.lesson_status", "incomplete");
                 this._scormService.doLMSCommit();
+                this._totalTime = 0;
+            }
+            else {
+                var totalTime = this._scormService.doLMSGetValue("cmi.core.total_time");
+                var time = this._timeFormattedToMillies(totalTime);
+                var suspendDataTime = (this._scormService.getSuspendData()["%time"] || "");
+                suspendDataTime = this._timeFormattedToMillies(suspendDataTime);
+                this._totalTime = suspendDataTime > time ? suspendDataTime : time;
             }
             if (count != undefined) {
                 for (var currentCount = 0; currentCount < count; currentCount++) {
@@ -13410,40 +13912,129 @@ var ScoController = /** @class */ (function () {
                 }
             }
         }
+        else {
+            this._totalTime = 0;
+        }
+    };
+    ScoController.prototype._timeFormattedToMillies = function (time) {
+        var times = time.split(":");
+        return (parseInt(times[0]) * 3600000) + (parseInt(times[1]) * 60000) + (parseInt(times[2]) * 1000);
+    };
+    ScoController.prototype._getPageObjective = function (page) {
+        var result = null;
+        if (this._scormService.LMSIsInitialized()) {
+            var count = this._scormService.doLMSGetValue("cmi.objectives._count");
+            if (count != undefined) {
+                for (var currentCount = 0; currentCount < count; currentCount++) {
+                    var currentKey = "cmi.objectives." + currentCount, id = this._scormService.doLMSGetValue(currentKey + ".id");
+                    if (id == page) {
+                        result = currentCount;
+                        currentCount = count;
+                    }
+                }
+            }
+        }
+        return result;
     };
     ScoController.prototype._onPageStateChange = function (e, result, $page, pageController) {
         var instance = e.data.instance;
         var total = instance._PageManager.count(), completed = instance._PageManager.getCompleted();
         if (instance._scormService.LMSIsInitialized()) {
-            var count = parseInt(instance._scormService.doLMSGetValue("cmi.objectives._count")), key = "cmi.objectives." + count;
+            var count = instance._getPageObjective(pageController.options.name), key = void 0, progress = instance._Navigator.getProgressPercentage();
+            if (count == undefined) {
+                count = parseInt(instance._scormService.doLMSGetValue("cmi.objectives._count"));
+            }
+            key = "cmi.objectives." + count;
             instance._scormService.doLMSSetValue(key + ".id", pageController.options.name);
             instance._scormService.doLMSSetValue(key + ".status", "completed");
             if (pageController.state.score != undefined) {
                 instance._scormService.doLMSSetValue(key + ".score.raw", pageController.state.score);
             }
+            if (instance._options.progressAsScore) {
+                instance._scormService.doLMSSetValue("cmi.core.score.raw", progress);
+            }
+            try {
+                var suspendData = instance._scormService.getSuspendData();
+                suspendData["%progress"] = progress;
+                instance._saveTotalTime(false, suspendData);
+                instance._scormService.setSuspendData(suspendData, false);
+            }
+            catch (e) {
+                console.error("[ScoController] Fail updating suspend data", e.message);
+            }
             if (completed.length == total) {
-                var score = 0.0, hasScore = 0;
-                for (var pageIndex = 0, completedLength = completed.length; pageIndex < completedLength; pageIndex++) {
-                    var page = instance._PageManager.getPage(completed[pageIndex]), pageScore = page.getState().score;
-                    if (pageScore != undefined) {
-                        hasScore++;
-                        score += pageScore;
+                if (instance._options.averagePagesScoreAsScore) {
+                    var score = 0.0, hasScore = 0;
+                    for (var pageIndex = 0, completedLength = completed.length; pageIndex < completedLength; pageIndex++) {
+                        var page = instance._PageManager.getPage(completed[pageIndex]), pageScore = page.getState().score;
+                        if (pageScore != undefined) {
+                            hasScore++;
+                            score += pageScore;
+                        }
+                    }
+                    var finalScore = (score * 100) / (hasScore * 100);
+                    instance._scormService.doLMSSetValue("cmi.core.score.raw", finalScore);
+                    if (instance._options.cutOffMark) {
+                        if (finalScore >= instance._options.cutOffMark) {
+                            instance._scormService.doLMSSetValue("cmi.core.lesson_status", "passed");
+                        }
+                        else {
+                            instance._scormService.doLMSSetValue("cmi.core.lesson_status", "failed");
+                        }
+                    }
+                    else {
+                        instance._scormService.doLMSSetValue("cmi.core.lesson_status", "completed");
                     }
                 }
-                instance._scormService.doLMSSetValue("cmi.core.score.raw", (score * 100) / (hasScore * 100));
-                instance._scormService.doLMSSetValue("cmi.core.lesson_status", "completed");
+                else if (instance._options.totalPagesScoreAsScore) {
+                    var score = 0.0;
+                    for (var pageIndex = 0, completedLength = completed.length; pageIndex < completedLength; pageIndex++) {
+                        var page = instance._PageManager.getPage(completed[pageIndex]), pageScore = page.getState().score;
+                        if (pageScore != undefined) {
+                            score += pageScore;
+                        }
+                    }
+                    instance._scormService.doLMSSetValue("cmi.core.score.raw", score);
+                    if (instance._options.cutOffMark) {
+                        if (score >= instance._options.cutOffMark) {
+                            instance._scormService.doLMSSetValue("cmi.core.lesson_status", "passed");
+                        }
+                        else {
+                            instance._scormService.doLMSSetValue("cmi.core.lesson_status", "failed");
+                        }
+                    }
+                    else {
+                        instance._scormService.doLMSSetValue("cmi.core.lesson_status", "completed");
+                    }
+                }
+                else {
+                    instance._scormService.doLMSSetValue("cmi.core.lesson_status", "completed");
+                }
             }
             instance._scormService.doLMSCommit();
         }
     };
     ScoController.prototype.exit = function () {
+        window.onbeforeunload = null;
         this._eventEmitter.globalEmitter.trigger(ScoController_1.ON_BEFORE_EXIT);
         if (this._scormService.LMSIsInitialized()) {
             // enviamos un exit
             this._scormService.doLMSSetValue("cmi.core.exit", "");
-            //los tiempos
+            // se obtiene tiempo total de todas las sesiones de suspend data
+            this._saveTotalTime(false);
+            var totalTimeSD = this.getTotalTime(false);
+            // se obtiene tiempo total de scorm
+            var totalTimeSC = this._timeFormattedToMillies(this._scormService.doLMSGetValue("cmi.core.total_time"));
+            // se obtiene tiempo de la sesión actual
             var sessionTime = this.getSessionTime();
+            // se guarda el que mayor sume
+            if ((totalTimeSD + sessionTime) > (totalTimeSC + sessionTime)) {
+                // se compensan los tiempos
+                sessionTime = (totalTimeSD - totalTimeSC) + sessionTime;
+            }
+            sessionTime = this.formatTime(sessionTime);
             this._scormService.doLMSSetValue("cmi.core.session_time", sessionTime);
+            this._stopAutoSaveTotalTime();
             this._scormService.doLMSCommit();
             this._scormService.doLMSFinish();
         }
@@ -13456,8 +14047,31 @@ var ScoController = /** @class */ (function () {
         }
         this._eventEmitter.globalEmitter.trigger(ScoController_1.ON_EXIT);
     };
+    ScoController.prototype.getDateStart = function () {
+        return new Date(this._dateStart.getTime());
+    };
     ScoController.prototype.getSessionTime = function () {
-        var now = Date.now(), sessionTime = now - this._dateStart.getTime();
+        var now = Date.now(), sessionTime = now - this.getDateStart().getTime();
+        return sessionTime;
+    };
+    ScoController.prototype.getTotalTime = function (includeSession) {
+        if (includeSession === void 0) { includeSession = true; }
+        return (this._totalTime || 0) + (includeSession ? this.getSessionTime() || 0 : 0);
+    };
+    ScoController.prototype.getTotalTimeFormatted = function (includeSession) {
+        if (includeSession === void 0) { includeSession = true; }
+        var totalTime = this.getTotalTime(includeSession);
+        return this.formatTime(totalTime);
+    };
+    ScoController.prototype.formatTime = function (timeInMillis) {
+        var hours = Math.floor(timeInMillis / (1000 * 60 * 60) % 60), minutes = Math.floor(timeInMillis / (1000 * 60) % 60), seconds = Math.floor(timeInMillis / 1000 % 60);
+        hours = hours < 10 ? '0' + hours : hours;
+        minutes = minutes < 10 ? '0' + minutes : minutes;
+        seconds = seconds < 10 ? '0' + seconds : seconds;
+        return hours + ':' + minutes + ':' + seconds;
+    };
+    ScoController.prototype.getSessionTimeFormatted = function () {
+        var sessionTime = this.getSessionTime();
         var hours = Math.floor(sessionTime / (1000 * 60 * 60) % 60), minutes = Math.floor(sessionTime / (1000 * 60) % 60), seconds = Math.floor(sessionTime / 1000 % 60);
         hours = hours < 10 ? '0' + hours : hours;
         minutes = minutes < 10 ? '0' + minutes : minutes;
@@ -13465,20 +14079,51 @@ var ScoController = /** @class */ (function () {
         return hours + ':' + minutes + ':' + seconds;
     };
     ScoController.prototype.run = function () {
+        var _this = this;
         this._dateStart = new Date();
-        this._init();
-        this._Navigator.activate(this._$pagesContainer);
-        this._$pagesContainer.addClass(ScoController_1.CLASS_PAGES);
-        this._ComponentInitializer.initialize(this._$context);
-        //init components
-        var currentPage = this._getCurrentPage();
-        if (!!currentPage) {
-            var pageIndex = this._PageManager.getPageIndex(currentPage);
-            pageIndex = pageIndex != -1 ? pageIndex : 0;
-            this._Navigator.goTo(pageIndex);
+        window.onbeforeunload = function () {
+            _this.exit();
+        };
+        this._$context = this._$("[data-hz-app]");
+        if (this._$context.length > 0) {
+            var continueRun = void 0;
+            var canRunPromise = void 0;
+            if ((typeof this._options.canRun).toLowerCase() == "function") {
+                continueRun = this._options.canRun(this._$, this._$context, this._scormService, this._PageManager, this._ResourceManager, this._ComponentManager, this._InjectorService);
+            }
+            else {
+                continueRun = true;
+            }
+            if ((typeof continueRun.then).toLowerCase() != "function") {
+                canRunPromise = jquery_1.$.Deferred().resolve(continueRun).promise();
+            }
+            else {
+                canRunPromise = continueRun;
+            }
+            canRunPromise.then(function (result) {
+                if (result === true) {
+                    _this._init();
+                    _this._Navigator.activate(_this._$pagesContainer);
+                    _this._$pagesContainer.addClass(ScoController_1.CLASS_PAGES);
+                    _this._ComponentInitializer.initialize(_this._$context);
+                    //init components
+                    var currentPage = _this._getCurrentPage();
+                    if (!!currentPage) {
+                        var pageIndex = _this._PageManager.getPageIndex(currentPage);
+                        pageIndex = pageIndex != -1 ? pageIndex : 0;
+                        _this._Navigator.goTo(pageIndex);
+                    }
+                    else {
+                        _this._Navigator.goTo(0);
+                    }
+                }
+                else if (result instanceof _this._$) {
+                    _this._$context.append(result);
+                }
+            });
         }
         else {
-            this._Navigator.goTo(0);
+            throw new Errors_1.HaztivityAppContextNotFound();
         }
         return this;
     };
@@ -13498,7 +14143,8 @@ var ScoController = /** @class */ (function () {
                 component_1.ComponentManager,
                 component_1.ComponentInitializer,
                 jquery_1.$,
-                ScormService_1.ScormService
+                ScormService_1.ScormService,
+                di_1.InjectorService
             ]
         })
     ], ScoController);
@@ -13579,6 +14225,9 @@ var PageRegister = /** @class */ (function () {
     PageRegister.prototype.off = function (events, handler) {
         this._eventEmitter.off(events + "." + PageRegister_1.NAMESPACE, handler);
         return this;
+    };
+    PageRegister.prototype.getOptions = function () {
+        return this._options;
     };
     /**
      * Obtiene el nombre de la página
@@ -13666,8 +14315,8 @@ var PageController = /** @class */ (function () {
         var score = 0, hasScore = false;
         for (var _i = 0, _a = this._resources; _i < _a.length; _i++) {
             var resource = _a[_i];
-            score += resource.getScore();
-            if (hasScore == false) {
+            if (resource.hasScore()) {
+                score += (resource.getScore() || 0);
                 hasScore = resource.hasScore();
             }
         }
@@ -13676,10 +14325,10 @@ var PageController = /** @class */ (function () {
     PageController.prototype.isCompleted = function (forceCheck) {
         var result = this.state.completed, current = this.state.completed;
         if (forceCheck || this.state.completed != true) {
-            result = this._getNumCompletedResources() === this._resources.length;
+            result = this.state.completed || this._getNumCompletedResources() === this._resources.length;
             //if the state changes, trigger event
             this.state.completed = result;
-            if (current !== result) {
+            if (current !== result || (this.prevState && this.prevState.score != this._getScore())) {
                 this.eventEmitter.trigger(PageController_1.ON_COMPLETE_CHANGE, [result, this.$element, this]);
                 this.eventEmitter.globalEmitter.trigger(PageController_1.ON_COMPLETE_CHANGE, [result, this.$element, this]);
             }
@@ -13715,13 +14364,14 @@ var PageController = /** @class */ (function () {
             var resource = _a[_i];
             resource.on(resource_1.ResourceController.ON_COMPLETED, { instance: this, resource: resource }, this._onResourceCompleted);
         }
-        if (this._resources.length == 0) {
+        /*if(this._resources.length == 0){
             this.isCompleted(true);
-        }
+        }*/
         return this._resources;
     };
     PageController.prototype._onResourceCompleted = function (e) {
         var instance = e.data.instance, resource = e.data.resource;
+        instance.prevState = instance._$.extend({}, instance.state);
         instance.state.score = instance._getScore();
         instance.eventEmitter.trigger(PageController_1.ON_RESOURCE_COMPLETED, [instance.$element, instance, resource]);
         instance.eventEmitter.globalEmitter.trigger(PageController_1.ON_RESOURCE_COMPLETED, [instance.$element, instance, resource]);
@@ -14835,6 +15485,7 @@ var devTools_1 = require("../devTools");
 var ScormService = /** @class */ (function () {
     function ScormService(Logger) {
         this.Logger = Logger;
+        this.escapeSuspendData = false;
         this._version = ScormService_1.VERSIONS.auto;
     }
     ScormService_1 = ScormService;
@@ -14848,6 +15499,59 @@ var ScormService = /** @class */ (function () {
             }
         }
         this._version = this._version || versions.auto;
+    };
+    ScormService.prototype.escapeJSONString = function (str) {
+        return str.replace(/({"|"}|\["|"\]|":"?|"?,"?)/g, function (match) { return match.replace(/"/g, '\"'); });
+    };
+    ScormService.prototype.unescapeJSONString = function (str) {
+        return str.replace(/({'|'}|\['|'\]|':'?|'?,'?)/g, function (match) { return match.replace(/'/g, '"'); });
+    };
+    ScormService.prototype.setSuspendData = function (data, commit) {
+        if (commit === void 0) { commit = true; }
+        var result = false;
+        if (this.LMSIsInitialized()) {
+            try {
+                var parsed = JSON.stringify(data);
+                //replace " with '
+                if (this.escapeSuspendData) {
+                    parsed = this.escapeJSONString(parsed);
+                }
+                this.doLMSSetValue("cmi.suspend_data", parsed);
+                if (commit) {
+                    this.doLMSCommit();
+                }
+                result = true;
+            }
+            catch (e) {
+                console.error("[ScormService] Failed setting suspend data:", e.message);
+            }
+        }
+        return result;
+    };
+    ScormService.prototype.getSuspendData = function () {
+        var result;
+        if (this.LMSIsInitialized()) {
+            var data = this.doLMSGetValue("cmi.suspend_data");
+            if (!!data) {
+                if (this.escapeSuspendData) {
+                    data = this.unescapeJSONString(data);
+                }
+                try {
+                    result = JSON.parse(data);
+                }
+                catch (e) {
+                    result = {};
+                    console.error("[ScormService] Failed getting suspend data:", e.message);
+                }
+            }
+            else {
+                result = {};
+            }
+        }
+        else {
+            result = {};
+        }
+        return result;
     };
     ScormService.prototype.getAPIVersion = function () {
         return this._version;
@@ -15314,6 +16018,21 @@ var PageManager = /** @class */ (function () {
         return completed;
     };
     /**
+     * Devuelve un array con los ids o índices de las páginas visitadas.
+     * @param {boolean} [returnName=false]      Indica si devolver los ids de las páginas o los índices
+     * @returns {String[]|Number[]}
+     */
+    PageManager.prototype.getVisited = function (returnName) {
+        var pages = this._pages, completed = [];
+        for (var pageIndex = 0, pagesLength = pages.length; pageIndex < pagesLength; pageIndex++) {
+            var currentPage = pages[pageIndex];
+            if (currentPage.isVisited()) {
+                completed.push(returnName === true ? currentPage.getPageName() : pageIndex);
+            }
+        }
+        return completed;
+    };
+    /**
      * Añade una página
      * @param {Page}    page        Página a añadir
      */
@@ -15334,6 +16053,9 @@ var PageManager = /** @class */ (function () {
         else {
             throw new Errors_1.HaztivityPageAlreadyRegistered(pageName);
         }
+    };
+    PageManager.prototype.getPages = function () {
+        return this._pages.slice();
     };
     PageManager.prototype._validatePageName = function (name) {
         return name.search(/[^\w|-]/g) == -1;
@@ -15409,6 +16131,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
  */
 var Navigator_1 = require("./navigator/Navigator");
 exports.Navigator = Navigator_1.Navigator;
+exports.NavigationMode = Navigator_1.NavigationMode;
 var NavigatorService_1 = require("./navigator/NavigatorService");
 exports.NavigatorService = NavigatorService_1.NavigatorService;
 //# sourceMappingURL=navigator.js.map
@@ -15431,6 +16154,11 @@ var jquery_1 = require("../jquery");
 var di_1 = require("../di");
 var page_1 = require("../page");
 var utils_1 = require("../utils");
+var NavigationMode;
+(function (NavigationMode) {
+    NavigationMode[NavigationMode["restricted"] = 0] = "restricted";
+    NavigationMode[NavigationMode["free"] = 1] = "free";
+})(NavigationMode = exports.NavigationMode || (exports.NavigationMode = {}));
 var Navigator = /** @class */ (function () {
     /**
      * Gestiona la transición entre páginas y el renderizado de las mismas en un contexto específico
@@ -15443,8 +16171,12 @@ var Navigator = /** @class */ (function () {
         this._PageManager = _PageManager;
         this._EventEmitterFactory = _EventEmitterFactory;
         this._development = false;
+        this._mode = NavigationMode.restricted;
     }
     Navigator_1 = Navigator;
+    Navigator.prototype.getProgressPercentage = function () {
+        return parseFloat(((this._PageManager.getCompleted().length * 100) / this._PageManager.count()).toFixed(2));
+    };
     Navigator.prototype.activate = function ($context) {
         this._$context = $context;
         this._eventEmitter = this._EventEmitterFactory.createEmitter();
@@ -15455,6 +16187,12 @@ var Navigator = /** @class */ (function () {
     Navigator.prototype.disableDev = function () {
         this._development = false;
     };
+    Navigator.prototype.setMode = function (mode) {
+        this._mode = mode || NavigationMode.restricted;
+    };
+    Navigator.prototype.getMode = function () {
+        return this._mode;
+    };
     /**
      * Navega a la página solicitada.
      * Debe estar registrada en PageManager
@@ -15463,21 +16201,20 @@ var Navigator = /** @class */ (function () {
      * página. False si no se realiza el cambio
      */
     Navigator.prototype.goTo = function (index) {
-        if (this.isDisabled() !== true) {
+        var currentPage = this.getCurrentPage(), //get current page and index
+        currentPageIndex = this.getCurrentPageIndex(), previousPageForTarget = this._PageManager.getPage(index - 1), currentPageIs = currentPageIndex > index
+            ? -1
+            : 1; //check the position of the old page relative to the new page
+        if (this._development || (this.isDisabled() !== true && (currentPageIs == -1 || this._nextDisabled !== true))) {
+            this.disable();
             //get the page requested
             var newPage = this._PageManager.getPage(index);
             //the page must be provided and different of the current page
             if (newPage) {
                 if (newPage !== this._currentPage) {
-                    var currentPage = this.getCurrentPage(), //get current page and index
-                    currentPageIndex = this.getCurrentPageIndex(), currentPageIs = currentPageIndex - index < 0
-                        ? -1
-                        : 1; //check the position of the old page relative to the new page
                     //check if resources are completed to go to the next page
-                    if (this._development === true || (currentPageIs === 1 || (currentPage == undefined || currentPage.getController().isCompleted()))) {
-                        if (this._currentRenderProcess && this._currentRenderProcess.state() === "pending") {
-                            this._currentRenderProcess.reject();
-                        }
+                    if (this._development === true || this._mode === NavigationMode.free || (currentPageIs === -1 || (previousPageForTarget == undefined || previousPageForTarget.isCompleted()))) {
+                        this._forceCompleteTransition();
                         this._currentRenderProcess = this._$.Deferred();
                         this._currentPage = newPage; //set new page as current
                         this._currentPageIndex = index;
@@ -15494,10 +16231,21 @@ var Navigator = /** @class */ (function () {
                                 state: currentPage.getState()
                             };
                         }
+                        this._currentRenderData = {
+                            newPage: {
+                                page: newPage,
+                                data: newPageData
+                            },
+                            oldPage: {
+                                page: currentPage,
+                                data: currentPageData
+                            },
+                            defer: this._currentRenderProcess
+                        };
                         //trigger event in navigator
-                        this._eventEmitter.trigger(Navigator_1.ON_CHANGE_PAGE_START, newPageData, currentPageData);
+                        this._eventEmitter.trigger(Navigator_1.ON_CHANGE_PAGE_START, [newPageData, currentPageData]);
                         //trigger a global event that could be listened by anyone
-                        this._eventEmitter.globalEmitter.trigger(Navigator_1.ON_CHANGE_PAGE_START, newPageData, currentPageData);
+                        this._eventEmitter.globalEmitter.trigger(Navigator_1.ON_CHANGE_PAGE_START, [newPageData, currentPageData]);
                         var currentPageElement = currentPage
                             ? currentPage.getController().getElement()
                             : null, //get current element
@@ -15527,8 +16275,11 @@ var Navigator = /** @class */ (function () {
                         else {
                             this._onPageShowEnd(newPage, newPageData, currentPage, currentPageData, this._currentRenderProcess);
                         }
+                        return this._currentRenderProcess;
                     }
-                    return this._currentRenderProcess;
+                    else {
+                        return false;
+                    }
                 }
             }
             else {
@@ -15538,25 +16289,14 @@ var Navigator = /** @class */ (function () {
         return false;
     };
     /**
-     * Devuelve un array con los índices de las páginas que hayan sido visitadas
-     * @returns {Number[]}
-     */
-    Navigator.prototype.getVisitedPages = function () {
-        var pagesLength = this._PageManager.count(), pages = [];
-        for (var pageIndex = 0; pageIndex < pagesLength; pageIndex++) {
-            var currentPage = this._PageManager.getPage(pageIndex), state = currentPage.getState();
-            if (state.visited) {
-                pages.push(pageIndex);
-            }
-        }
-        return pages;
-    };
-    /**
      * Devuelve el estado actual de deshabilitado
      * @returns {boolean}
      */
     Navigator.prototype.isDisabled = function () {
         return this._disabled;
+    };
+    Navigator.prototype.isNextDisabled = function () {
+        return this._nextDisabled;
     };
     /**
      * Establece el estado de deshabilitado
@@ -15566,10 +16306,21 @@ var Navigator = /** @class */ (function () {
         if (this._disabled !== disabled) {
             this._disabled = disabled;
             if (disabled) {
-                this._eventEmitter.trigger(Navigator_1.ON_ENABLE);
+                this._eventEmitter.trigger(Navigator_1.ON_DISABLE);
             }
             else {
-                this._eventEmitter.trigger(Navigator_1.ON_DISABLE);
+                this._eventEmitter.trigger(Navigator_1.ON_ENABLE);
+            }
+        }
+    };
+    Navigator.prototype.setNextDisabled = function (disabled) {
+        if (this._nextDisabled !== disabled) {
+            this._nextDisabled = disabled;
+            if (disabled) {
+                this._eventEmitter.trigger(Navigator_1.ON_NEXT_DISABLE);
+            }
+            else {
+                this._eventEmitter.trigger(Navigator_1.ON_NEXT_ENABLE);
             }
         }
     };
@@ -15613,6 +16364,34 @@ var Navigator = /** @class */ (function () {
             return false;
         }
     };
+    Navigator.prototype._forceCompleteTransition = function () {
+        if (this._currentRenderData && this._currentRenderData.defer.state() == "pending") {
+            var oldPage = this._currentRenderData.oldPage.page, newPage = this._currentRenderData.newPage.page;
+            if (oldPage) {
+                var controller = oldPage.getController();
+                oldPage.detach();
+                if (controller) {
+                    var element = controller.getElement();
+                    if (element) {
+                        element.remove();
+                    }
+                }
+            }
+            this._$context.removeAttr(Navigator_1.ATTR_TRANSITION_TO);
+            this._$context.attr(Navigator_1.ATTR_CURRENT, this._currentRenderData.newPage.data.name);
+            //trigger event in navigator
+            this._eventEmitter.trigger(Navigator_1.ON_CHANGE_PAGE_END, [
+                this._currentRenderData.newPage.data,
+                this._currentRenderData.oldPage.data
+            ]);
+            //trigger a global event that could be listened by anyone
+            this._eventEmitter.globalEmitter.trigger(Navigator_1.ON_CHANGE_PAGE_END, [
+                this._currentRenderData.newPage.data,
+                this._currentRenderData.oldPage.data
+            ]);
+            this._currentRenderData.defer.reject(newPage, oldPage);
+        }
+    };
     /**
      * Invocado al finalizarse la animación del cambio de página
      * @param {PageImplementation}      newPage     Página activada
@@ -15623,21 +16402,46 @@ var Navigator = /** @class */ (function () {
      * @private
      */
     Navigator.prototype._onPageShowEnd = function (newPage, newPageData, oldPage, oldPageData, defer) {
-        if (oldPage) {
-            var controller = oldPage.getController();
-            oldPage.detach();
-            controller.getElement().remove();
-        }
-        this._$context.removeAttr(Navigator_1.ATTR_TRANSITION_TO);
-        this._$context.attr(Navigator_1.ATTR_CURRENT, newPageData.name);
-        if (newPage.isCompleted()) {
+        if (defer.state() == "pending") {
+            if (oldPage) {
+                var controller = oldPage.getController();
+                oldPage.detach();
+                controller.getElement().remove();
+            }
+            this._$context.removeAttr(Navigator_1.ATTR_TRANSITION_TO);
+            this._$context.attr(Navigator_1.ATTR_CURRENT, newPageData.name);
+            if (oldPage) {
+                oldPage.getPage().off("." + Navigator_1.NAMESPACE);
+            }
             this.enable();
+            if (newPage.isCompleted() || this._mode === NavigationMode.free) {
+                this.setNextDisabled(false);
+            }
+            else {
+                this.setNextDisabled(true);
+                newPage.getPage().off("." + Navigator_1.NAMESPACE).on(page_1.PageController.ON_COMPLETE_CHANGE + "." + Navigator_1.NAMESPACE, { instance: this }, this._onPageCompletedChange);
+            }
+            //trigger event in navigator
+            this._eventEmitter.trigger(Navigator_1.ON_CHANGE_PAGE_END, [
+                newPageData,
+                oldPageData
+            ]);
+            //trigger a global event that could be listened by anyone
+            this._eventEmitter.globalEmitter.trigger(Navigator_1.ON_CHANGE_PAGE_END, [
+                newPageData,
+                oldPageData
+            ]);
+            defer.resolve(newPageData, oldPageData);
         }
-        //trigger event in navigator
-        this._eventEmitter.trigger(Navigator_1.ON_CHANGE_PAGE_END, [newPageData, oldPageData]);
-        //trigger a global event that could be listened by anyone
-        this._eventEmitter.globalEmitter.trigger(Navigator_1.ON_CHANGE_PAGE_END, [newPageData, oldPageData]);
-        defer.resolve(newPageData, oldPageData);
+    };
+    Navigator.prototype._onPageCompletedChange = function (e, completed) {
+        var instance = e.data.instance;
+        if (completed || instance._mode === NavigationMode.free) {
+            instance.setNextDisabled(false);
+        }
+        else {
+            instance.setNextDisabled(true);
+        }
     };
     /**
      * Obtiene el índice de la página actual
@@ -15692,6 +16496,8 @@ var Navigator = /** @class */ (function () {
     Navigator.ON_DRAW_PAGE = Navigator_1.NAMESPACE + ":draw";
     Navigator.ON_DISABLE = Navigator_1.NAMESPACE + ":disable";
     Navigator.ON_ENABLE = Navigator_1.NAMESPACE + ":enable";
+    Navigator.ON_NEXT_DISABLE = Navigator_1.NAMESPACE + ":nextdisable";
+    Navigator.ON_NEXT_ENABLE = Navigator_1.NAMESPACE + ":nextenable";
     Navigator.ON_CHANGE_PAGE_END = Navigator_1.NAMESPACE + ":changeend";
     Navigator.ON_CHANGE_PAGE_START = Navigator_1.NAMESPACE + ":changestart";
     Navigator.ATTR_TRANSITION_TO = "data-hz-navigator-transition-to";
@@ -15742,7 +16548,8 @@ var NavigatorService = /** @class */ (function () {
             "getCurrentPageData",
             "on",
             "one",
-            "off"
+            "off",
+            "getProgressPercentage"
         ];
         for (var _i = 0, publish_1 = publish; _i < publish_1.length; _i++) {
             var method = publish_1[_i];
@@ -15768,6 +16575,9 @@ var NavigatorService = /** @class */ (function () {
         return undefined;
     };
     NavigatorService.prototype.getCurrentPageData = function () {
+        return undefined;
+    };
+    NavigatorService.prototype.getProgressPercentage = function () {
         return undefined;
     };
     /**
@@ -16525,8 +17335,9 @@ var DevTools = /** @class */ (function () {
         }
     };
     DevTools = __decorate([
-        di_1.Module({
+        di_1.Core({
             name: "DevTools",
+            public: true,
             dependencies: [
                 Logger_1.Logger,
                 navigator_1.Navigator,
@@ -16548,12 +17359,14 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
 ;(function(undefined) {
     'use strict';
     /**
-     * BottleJS v1.7.0 - 2018-01-29
+     * BottleJS v1.7.2 - 2019-02-07
      * A powerful dependency injection micro container
      *
-     * Copyright (c) 2018 Stephen Young
+     * Copyright (c) 2019 Stephen Young
      * Licensed MIT
      */
+    var Bottle;
+    
     /**
      * String constants
      */
@@ -16590,7 +17403,7 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
      */
     var getNested = function getNested(obj, prop) {
         var service = obj[prop];
-        if (service === undefined && globalConfig.strict) {
+        if (service === undefined && Bottle.config.strict) {
             throw new Error('Bottle was unable to resolve a service.  `' + prop + '` is undefined.');
         }
         return service;
@@ -16622,124 +17435,6 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
      */
     var getNestedService = function getNestedService(fullname) {
         return fullname.split(DELIMITER).reduce(getNested, this);
-    };
-    
-    /**
-     * Register a constant
-     *
-     * @param String name
-     * @param mixed value
-     * @return Bottle
-     */
-    var constant = function constant(name, value) {
-        var parts = name.split(DELIMITER);
-        name = parts.pop();
-        defineConstant.call(parts.reduce(setValueObject, this.container), name, value);
-        return this;
-    };
-    
-    var defineConstant = function defineConstant(name, value) {
-        Object.defineProperty(this, name, {
-            configurable : false,
-            enumerable : true,
-            value : value,
-            writable : false
-        });
-    };
-    
-    /**
-     * Register decorator.
-     *
-     * @param String fullname
-     * @param Function func
-     * @return Bottle
-     */
-    var decorator = function decorator(fullname, func) {
-        var parts, name;
-        if (typeof fullname === FUNCTION_TYPE) {
-            func = fullname;
-            fullname = GLOBAL_NAME;
-        }
-    
-        parts = fullname.split(DELIMITER);
-        name = parts.shift();
-        if (parts.length) {
-            getNestedBottle.call(this, name).decorator(parts.join(DELIMITER), func);
-        } else {
-            if (!this.decorators[name]) {
-                this.decorators[name] = [];
-            }
-            this.decorators[name].push(func);
-        }
-        return this;
-    };
-    
-    /**
-     * Register a function that will be executed when Bottle#resolve is called.
-     *
-     * @param Function func
-     * @return Bottle
-     */
-    var defer = function defer(func) {
-        this.deferred.push(func);
-        return this;
-    };
-    
-    
-    /**
-     * Immediately instantiates the provided list of services and returns them.
-     *
-     * @param Array services
-     * @return Array Array of instances (in the order they were provided)
-     */
-    var digest = function digest(services) {
-        return (services || []).map(getNestedService, this.container);
-    };
-    
-    /**
-     * Register a factory inside a generic provider.
-     *
-     * @param String name
-     * @param Function Factory
-     * @return Bottle
-     */
-    var factory = function factory(name, Factory) {
-        return provider.call(this, name, function GenericProvider() {
-            this.$get = Factory;
-        });
-    };
-    
-    /**
-     * Register an instance factory inside a generic factory.
-     *
-     * @param {String} name - The name of the service
-     * @param {Function} Factory - The factory function, matches the signature required for the
-     * `factory` method
-     * @return Bottle
-     */
-    var instanceFactory = function instanceFactory(name, Factory) {
-        return factory.call(this, name, function GenericInstanceFactory(container) {
-            return {
-                instance : Factory.bind(Factory, container)
-            };
-        });
-    };
-    
-    /**
-     * A filter function for removing bottle container methods and providers from a list of keys
-     */
-    var byMethod = function byMethod(name) {
-        return !/^\$(?:decorator|register|list)$|Provider$/.test(name);
-    };
-    
-    /**
-     * List the services registered on the container.
-     *
-     * @param Object container
-     * @return Array
-     */
-    var list = function list(container) {
-        return Object.keys(container || this.container || {}).filter(byMethod);
     };
     
     /**
@@ -16808,46 +17503,6 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
     };
     
     /**
-     * Named bottle instances
-     *
-     * @type Object
-     */
-    var bottles = {};
-    
-    /**
-     * Get an instance of bottle.
-     *
-     * If a name is provided the instance will be stored in a local hash.  Calling Bottle.pop multiple
-     * times with the same name will return the same instance.
-     *
-     * @param String name
-     * @return Bottle
-     */
-    var pop = function pop(name) {
-        var instance;
-        if (typeof name === STRING_TYPE) {
-            instance = bottles[name];
-            if (!instance) {
-                bottles[name] = instance = new Bottle();
-                instance.constant('BOTTLE_NAME', name);
-            }
-            return instance;
-        }
-        return new Bottle();
-    };
-    
-    /**
-     * Clear all named bottles.
-     */
-    var clear = function clear(name) {
-        if (typeof name === STRING_TYPE) {
-            delete bottles[name];
-        } else {
-            bottles = {};
-        }
-    };
-    
-    /**
      * Used to process decorators in the provider
      *
      * @param Object instance
@@ -16858,30 +17513,6 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
         return func(instance);
     };
     
-    /**
-     * Register a provider.
-     *
-     * @param String fullname
-     * @param Function Provider
-     * @return Bottle
-     */
-    var provider = function provider(fullname, Provider) {
-        var parts, name;
-        parts = fullname.split(DELIMITER);
-        if (this.providerMap[fullname] && parts.length === 1 && !this.container[fullname + PROVIDER_SUFFIX]) {
-            return console.error(fullname + ' provider already instantiated.');
-        }
-        this.originalProviders[fullname] = Provider;
-        this.providerMap[fullname] = true;
-    
-        name = parts.shift();
-    
-        if (parts.length) {
-            getNestedBottle.call(this, name).provider(parts.join(DELIMITER), Provider);
-            return this;
-        }
-        return createProvider.call(this, name, Provider);
-    };
     
     /**
      * Get decorators and middleware including globals
@@ -16891,6 +17522,7 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
     var getWithGlobal = function getWithGlobal(collection, name) {
         return (collection[name] || []).concat(collection.__global__ || []);
     };
+    
     
     /**
      * Create the provider properties on the container
@@ -16942,6 +17574,284 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
         return this;
     };
     
+    
+    /**
+     * Register a provider.
+     *
+     * @param String fullname
+     * @param Function Provider
+     * @return Bottle
+     */
+    var provider = function provider(fullname, Provider) {
+        var parts, name;
+        parts = fullname.split(DELIMITER);
+        if (this.providerMap[fullname] && parts.length === 1 && !this.container[fullname + PROVIDER_SUFFIX]) {
+            return console.error(fullname + ' provider already instantiated.');
+        }
+        this.originalProviders[fullname] = Provider;
+        this.providerMap[fullname] = true;
+    
+        name = parts.shift();
+    
+        if (parts.length) {
+            getNestedBottle.call(this, name).provider(parts.join(DELIMITER), Provider);
+            return this;
+        }
+        return createProvider.call(this, name, Provider);
+    };
+    
+    /**
+     * Register a factory inside a generic provider.
+     *
+     * @param String name
+     * @param Function Factory
+     * @return Bottle
+     */
+    var factory = function factory(name, Factory) {
+        return provider.call(this, name, function GenericProvider() {
+            this.$get = Factory;
+        });
+    };
+    
+    /**
+     * Private helper for creating service and service factories.
+     *
+     * @param String name
+     * @param Function Service
+     * @return Bottle
+     */
+    var createService = function createService(name, Service, isClass) {
+        var deps = arguments.length > 3 ? slice.call(arguments, 3) : [];
+        var bottle = this;
+        return factory.call(this, name, function GenericFactory() {
+            var serviceFactory = Service; // alias for jshint
+            var args = deps.map(getNestedService, bottle.container);
+    
+            if (!isClass) {
+                return serviceFactory.apply(null, args);
+            }
+            return new (Service.bind.apply(Service, [null].concat(args)))();
+        });
+    };
+    
+    /**
+     * Register a class service
+     *
+     * @param String name
+     * @param Function Service
+     * @return Bottle
+     */
+    var service = function service(name, Service) {
+        return createService.apply(this, [name, Service, true].concat(slice.call(arguments, 2)));
+    };
+    
+    /**
+     * Register a function service
+     */
+    var serviceFactory = function serviceFactory(name, factoryService) {
+        return createService.apply(this, [name, factoryService, false].concat(slice.call(arguments, 2)));
+    };
+    
+    /**
+     * Define a mutable property on the container.
+     *
+     * @param String name
+     * @param mixed val
+     * @return void
+     * @scope container
+     */
+    var defineValue = function defineValue(name, val) {
+        Object.defineProperty(this, name, {
+            configurable : true,
+            enumerable : true,
+            value : val,
+            writable : true
+        });
+    };
+    
+    /**
+     * Iterator for setting a plain object literal via defineValue
+     *
+     * @param Object container
+     * @param string name
+     */
+    var setValueObject = function setValueObject(container, name) {
+        var nestedContainer = container[name];
+        if (!nestedContainer) {
+            nestedContainer = {};
+            defineValue.call(container, name, nestedContainer);
+        }
+        return nestedContainer;
+    };
+    
+    
+    /**
+     * Register a value
+     *
+     * @param String name
+     * @param mixed val
+     * @return Bottle
+     */
+    var value = function value(name, val) {
+        var parts;
+        parts = name.split(DELIMITER);
+        name = parts.pop();
+        defineValue.call(parts.reduce(setValueObject, this.container), name, val);
+        return this;
+    };
+    
+    /**
+     * Define an enumerable, non-configurable, non-writable value.
+     *
+     * @param String name
+     * @param mixed value
+     * @return undefined
+     */
+    var defineConstant = function defineConstant(name, value) {
+        Object.defineProperty(this, name, {
+            configurable : false,
+            enumerable : true,
+            value : value,
+            writable : false
+        });
+    };
+    
+    /**
+     * Register a constant
+     *
+     * @param String name
+     * @param mixed value
+     * @return Bottle
+     */
+    var constant = function constant(name, value) {
+        var parts = name.split(DELIMITER);
+        name = parts.pop();
+        defineConstant.call(parts.reduce(setValueObject, this.container), name, value);
+        return this;
+    };
+    
+    /**
+     * Register decorator.
+     *
+     * @param String fullname
+     * @param Function func
+     * @return Bottle
+     */
+    var decorator = function decorator(fullname, func) {
+        var parts, name;
+        if (typeof fullname === FUNCTION_TYPE) {
+            func = fullname;
+            fullname = GLOBAL_NAME;
+        }
+    
+        parts = fullname.split(DELIMITER);
+        name = parts.shift();
+        if (parts.length) {
+            getNestedBottle.call(this, name).decorator(parts.join(DELIMITER), func);
+        } else {
+            if (!this.decorators[name]) {
+                this.decorators[name] = [];
+            }
+            this.decorators[name].push(func);
+        }
+        return this;
+    };
+    
+    /**
+     * Register a function that will be executed when Bottle#resolve is called.
+     *
+     * @param Function func
+     * @return Bottle
+     */
+    var defer = function defer(func) {
+        this.deferred.push(func);
+        return this;
+    };
+    
+    
+    /**
+     * Immediately instantiates the provided list of services and returns them.
+     *
+     * @param Array services
+     * @return Array Array of instances (in the order they were provided)
+     */
+    var digest = function digest(services) {
+        return (services || []).map(getNestedService, this.container);
+    };
+    
+    /**
+     * Register an instance factory inside a generic factory.
+     *
+     * @param {String} name - The name of the service
+     * @param {Function} Factory - The factory function, matches the signature required for the
+     * `factory` method
+     * @return Bottle
+     */
+    var instanceFactory = function instanceFactory(name, Factory) {
+        return factory.call(this, name, function GenericInstanceFactory(container) {
+            return {
+                instance : Factory.bind(Factory, container)
+            };
+        });
+    };
+    
+    /**
+     * A filter function for removing bottle container methods and providers from a list of keys
+     */
+    var byMethod = function byMethod(name) {
+        return !/^\$(?:decorator|register|list)$|Provider$/.test(name);
+    };
+    
+    /**
+     * List the services registered on the container.
+     *
+     * @param Object container
+     * @return Array
+     */
+    var list = function list(container) {
+        return Object.keys(container || this.container || {}).filter(byMethod);
+    };
+    
+    /**
+     * Named bottle instances
+     *
+     * @type Object
+     */
+    var bottles = {};
+    
+    /**
+     * Get an instance of bottle.
+     *
+     * If a name is provided the instance will be stored in a local hash.  Calling Bottle.pop multiple
+     * times with the same name will return the same instance.
+     *
+     * @param String name
+     * @return Bottle
+     */
+    var pop = function pop(name) {
+        var instance;
+        if (typeof name === STRING_TYPE) {
+            instance = bottles[name];
+            if (!instance) {
+                bottles[name] = instance = new Bottle();
+                instance.constant('BOTTLE_NAME', name);
+            }
+            return instance;
+        }
+        return new Bottle();
+    };
+    
+    /**
+     * Clear all named bottles.
+     */
+    var clear = function clear(name) {
+        if (typeof name === STRING_TYPE) {
+            delete bottles[name];
+        } else {
+            bottles = {};
+        }
+    };
+    
     /**
      * Register a service, factory, provider, or value based on properties on the object.
      *
@@ -16975,19 +17885,25 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
     };
     
     /**
-     * Resets all providers on a bottle instance.
+     * Resets providers on a bottle instance. If 'names' array is provided, only the named providers will be reset.
      *
+     * @param Array names
      * @return void
      */
-    var resetProviders = function resetProviders() {
-        var providers = this.originalProviders;
-        Object.keys(this.originalProviders).forEach(function resetPrvider(provider) {
-            var parts = provider.split(DELIMITER);
+    var resetProviders = function resetProviders(names) {
+        var tempProviders = this.originalProviders;
+        var shouldFilter = Array.isArray(names);
+    
+        Object.keys(this.originalProviders).forEach(function resetProvider(originalProviderName) {
+            if (shouldFilter && names.indexOf(originalProviderName) === -1) {
+                return;
+            }
+            var parts = originalProviderName.split(DELIMITER);
             if (parts.length > 1) {
                 parts.forEach(removeProviderMap, getNestedBottle.call(this, parts[0]));
             }
-            removeProviderMap.call(this, provider);
-            this.provider(provider, providers[provider]);
+            removeProviderMap.call(this, originalProviderName);
+            this.provider(originalProviderName, tempProviders[originalProviderName]);
         }, this);
     };
     
@@ -17006,99 +17922,13 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
         return this;
     };
     
-    /**
-     * Register a function service
-     */
-    var serviceFactory = function serviceFactory(name, factoryService) {
-        return createService.apply(this, [name, factoryService, false].concat(slice.call(arguments, 2)));
-    };
-    
-    /**
-     * Register a class service
-     *
-     * @param String name
-     * @param Function Service
-     * @return Bottle
-     */
-    var service = function service(name, Service) {
-        return createService.apply(this, [name, Service, true].concat(slice.call(arguments, 2)));
-    };
-    
-    /**
-     * Private helper for creating service and service factories.
-     *
-     * @param String name
-     * @param Function Service
-     * @return Bottle
-     */
-    var createService = function createService(name, Service, isClass) {
-        var deps = arguments.length > 3 ? slice.call(arguments, 3) : [];
-        var bottle = this;
-        return factory.call(this, name, function GenericFactory() {
-            var serviceFactory = Service; // alias for jshint
-            var args = deps.map(getNestedService, bottle.container);
-    
-            if (!isClass) {
-                return serviceFactory.apply(null, args);
-            }
-            return new (Service.bind.apply(Service, [null].concat(args)))();
-        });
-    };
-    
-    /**
-     * Register a value
-     *
-     * @param String name
-     * @param mixed val
-     * @return Bottle
-     */
-    var value = function value(name, val) {
-        var parts;
-        parts = name.split(DELIMITER);
-        name = parts.pop();
-        defineValue.call(parts.reduce(setValueObject, this.container), name, val);
-        return this;
-    };
-    
-    /**
-     * Iterator for setting a plain object literal via defineValue
-     *
-     * @param Object container
-     * @param string name
-     */
-    var setValueObject = function setValueObject(container, name) {
-        var nestedContainer = container[name];
-        if (!nestedContainer) {
-            nestedContainer = {};
-            defineValue.call(container, name, nestedContainer);
-        }
-        return nestedContainer;
-    };
-    
-    /**
-     * Define a mutable property on the container.
-     *
-     * @param String name
-     * @param mixed val
-     * @return void
-     * @scope container
-     */
-    var defineValue = function defineValue(name, val) {
-        Object.defineProperty(this, name, {
-            configurable : true,
-            enumerable : true,
-            value : val,
-            writable : true
-        });
-    };
-    
     
     /**
      * Bottle constructor
      *
      * @param String name Optional name for functional construction
      */
-    var Bottle = function Bottle(name) {
+    Bottle = function Bottle(name) {
         if (!(this instanceof Bottle)) {
             return Bottle.pop(name);
         }
@@ -17149,7 +17979,7 @@ ___scope___.file("dist/bottle.js", function(exports, require, module, __filename
     /**
      * Global config
      */
-    var globalConfig = Bottle.config = {
+    Bottle.config = {
         strict : false
     };
     
@@ -17561,6 +18391,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 var core_1 = require("@haztivity/core");
 require("jquery-ui-dist/jquery-ui");
+var Hammer = require("hammerjs");
 var HzNavbarComponent = /** @class */ (function (_super) {
     __extends(HzNavbarComponent, _super);
     function HzNavbarComponent(_$, _EventEmitterFactory, _Navigator, _PageManager, _DataOptions) {
@@ -17568,6 +18399,7 @@ var HzNavbarComponent = /** @class */ (function (_super) {
         _this._Navigator = _Navigator;
         _this._PageManager = _PageManager;
         _this._DataOptions = _DataOptions;
+        _this._progress = 0;
         _this._currentPageIndex = 0;
         _this._numPages = 0;
         return _this;
@@ -17578,9 +18410,63 @@ var HzNavbarComponent = /** @class */ (function (_super) {
         this._getElements();
         this.updateLocale();
         this._initExitDialog();
-        this.progress(0);
+        this.progress(this._Navigator.getProgressPercentage());
         this._assignEvents();
         this.updatePaginator();
+        if (this._options.touch != false) {
+            //this._touchRegion = new ZingTouch.Region(ScoFactory.getCurrentSco()._$context.get(0));
+            this.hammerManager = new Hammer.Manager(core_1.ScoFactory.getCurrentSco()._$context.get(0), {
+                touchAction: 'auto',
+                inputClass: Hammer.SUPPORT_POINTER_EVENTS ? Hammer.PointerEventInput : Hammer.TouchInput
+            });
+            this.hammerManager.add(new Hammer.Swipe({ direction: Hammer.DIRECTION_HORIZONTAL }));
+            this.hammerManager.on("swipe", Hammer.bindFn(this._onSwipe, this));
+        }
+    };
+    HzNavbarComponent.prototype._onSwipe = function (e) {
+        debugger;
+        //if target is navbar
+        //else
+        //if X is 0-50, and direction is right
+        //else if x is window-50 and direction is lef
+        if (!this._Navigator.isDisabled()) {
+            // starting from left and counter clockwise
+            //       90
+            //   180     0/360
+            //      270
+            //right or down
+            var goTo = void 0;
+            if (this._$element.get(0) == e.target || this._$element.find(e.target).length > 0) {
+                if (e.direction === Hammer.DIRECTION_RIGHT) {
+                    goTo = 1;
+                }
+                else if (e.direction === Hammer.DIRECTION_LEFT) {
+                    goTo = -1;
+                }
+            }
+            else {
+                var delta_x = e.deltaX, x = e.changedPointers[0].clientX - delta_x, maxWidth = core_1.$(document.body).width();
+                if (x <= 100) {
+                    // handle swipe from left edge e.t.c
+                    goTo = 1;
+                }
+                else if (x >= maxWidth - 100) {
+                    // handle other case
+                    goTo = -1;
+                }
+            }
+            if (goTo != undefined) {
+                if (this._options.reverseSwipeNavigation) {
+                    goTo /= -1;
+                }
+                if (goTo === 1 && !this._nextDisabled) {
+                    this._Navigator.next();
+                }
+                else if (goTo === -1 && !this._prevDisabled) {
+                    this._Navigator.prev();
+                }
+            }
+        }
     };
     HzNavbarComponent.prototype._initExitDialog = function () {
         var locale = this._options.locale[this._options.lang] || this._options.locale[this._options.defaultLang];
@@ -17609,6 +18495,7 @@ var HzNavbarComponent = /** @class */ (function (_super) {
             options.dialogClass = HzNavbarComponent_1.CLASS_LIST_EXIT_DIALOG;
         }
         this._$exitDialog.dialog(options);
+        this._exitDialog = this._$exitDialog.dialog("instance");
     };
     HzNavbarComponent.prototype.updatePaginator = function () {
         var numPages = this._PageManager.count();
@@ -17624,7 +18511,7 @@ var HzNavbarComponent = /** @class */ (function (_super) {
      * @returns {number}
      */
     HzNavbarComponent.prototype.progress = function (value) {
-        if (value) {
+        if (value != undefined) {
             value = parseFloat(value.toFixed(2));
             if (!isNaN(value)) {
                 if (value >= 0 && value <= 100) {
@@ -17688,13 +18575,13 @@ var HzNavbarComponent = /** @class */ (function (_super) {
         var result;
         if (this._indexListDialog) {
             result = this._indexListDialog.isOpen();
-            this._indexListDialog.open();
         }
         return result;
     };
-    HzNavbarComponent.prototype.openIndexList = function () {
+    HzNavbarComponent.prototype.openIndexList = function (advanced) {
+        if (advanced === void 0) { advanced = false; }
         if (this._indexListDialog) {
-            this.updateIndex();
+            this.updateIndex(advanced);
             this._indexListDialog.open();
         }
     };
@@ -17704,32 +18591,46 @@ var HzNavbarComponent = /** @class */ (function (_super) {
             var options = core_1.$.extend(true, {}, HzNavbarComponent_1.OPT_DIALOG_DEFAULTS, this._DataOptions.getDataOptions(this._$indexList, "dialog"));
             options.dialogClass = HzNavbarComponent_1.CLASS_LIST_INDEX_DIALOG;
             this._$indexList.dialog(options);
+            this._$indexList.on("dialogclose", { instance: this }, this._onDialogClosed);
             this._indexListDialog = this._$indexList.data("ui-dialog");
         }
     };
-    HzNavbarComponent.prototype.updateIndex = function () {
+    HzNavbarComponent.prototype.updateIndex = function (advanced) {
+        if (advanced === void 0) { advanced = false; }
         if (this._$indexList && this._$indexList.length > 0 && this._$indexListItemTemplate && this._$indexListItemTemplate.length > 0) {
             this._$indexList.empty();
             var pages = [];
-            var numPages = this._PageManager.count(), previousState = void 0;
+            var numPages = this._PageManager.count();
             for (var numPageIndex = 0; numPageIndex < numPages; numPageIndex++) {
                 var currentPage = this._PageManager.getPage(numPageIndex), pageRegister = currentPage.getPage();
                 var $page = this._$indexListItemTemplate.clone();
-                $page.find(HzNavbarComponent_1.QUERY_INDEX_LIST_ITEM_CONTENT).html(pageRegister._options.title);
-                if (currentPage._state.completed) {
-                    $page.addClass(HzNavbarComponent_1.CLASS_PAGE_COMPLETED);
-                }
-                else if (currentPage._state.visited) {
-                    $page.addClass(HzNavbarComponent_1.CLASS_PAGE_VISITED);
-                }
-                if (previousState == undefined || previousState.completed) {
+                var options = pageRegister.getOptions();
+                if (options.isHeader != false || advanced) {
+                    var prefix = "";
+                    if (advanced) {
+                        prefix = pageRegister.getName();
+                        if (!options.isHeader) {
+                            prefix += "[" + prefix + "]";
+                        }
+                        prefix += " - ";
+                    }
+                    $page.find(HzNavbarComponent_1.QUERY_INDEX_LIST_ITEM_CONTENT).html(prefix + options.title);
+                    $page.attr("data-page", options.name);
+                    if (this._currentPageIndex == numPageIndex) {
+                        $page.addClass(HzNavbarComponent_1.CLASS_ACTIVE_PAGE);
+                    }
+                    if (currentPage._state.completed) {
+                        $page.addClass(HzNavbarComponent_1.CLASS_PAGE_COMPLETED);
+                    }
+                    else if (currentPage._state.visited) {
+                        $page.addClass(HzNavbarComponent_1.CLASS_PAGE_VISITED);
+                    }
                     $page.data(HzNavbarComponent_1.DATA_PAGE, {
                         name: pageRegister.getName(),
                         index: numPageIndex
                     });
+                    pages.push($page);
                 }
-                previousState = currentPage._state;
-                pages.push($page);
             }
             this._$indexList.append(pages);
         }
@@ -17765,6 +18666,8 @@ var HzNavbarComponent = /** @class */ (function (_super) {
         this._$indexList.on("click." + HzNavbarComponent_1.NAMESPACE, HzNavbarComponent_1.QUERY_INDEX_LIST_ITEM, { instance: this }, this._onIndexListItemClick);
         this._Navigator.on(core_1.Navigator.ON_DISABLE, { instance: this }, this._onDisabled);
         this._Navigator.on(core_1.Navigator.ON_ENABLE, { instance: this }, this._onEnabled);
+        this._Navigator.on(core_1.Navigator.ON_NEXT_DISABLE, { instance: this }, this._onNextDisabledChange);
+        this._Navigator.on(core_1.Navigator.ON_NEXT_ENABLE, { instance: this }, this._onNextDisabledChange);
         this._Navigator.on(core_1.Navigator.ON_CHANGE_PAGE_START, { instance: this }, this._onPageChangeStart);
         this._Navigator.on(core_1.Navigator.ON_CHANGE_PAGE_END, { instance: this }, this._onPageChangeEnd);
     };
@@ -17772,8 +18675,13 @@ var HzNavbarComponent = /** @class */ (function (_super) {
         e.preventDefault();
         var instance = e.data.instance, $item = core_1.$(this), page = $item.data(HzNavbarComponent_1.DATA_PAGE);
         if (page) {
-            instance.closeIndexList();
-            instance._Navigator.goTo(page.index);
+            if (e.altKey) {
+                instance._Navigator.enableDev();
+            }
+            if (!!instance._Navigator.goTo(page.index)) {
+                instance.closeIndexList();
+            }
+            instance._Navigator.disableDev();
         }
     };
     /**
@@ -17783,7 +18691,14 @@ var HzNavbarComponent = /** @class */ (function (_super) {
      */
     HzNavbarComponent.prototype._onNextClick = function (e) {
         var instance = e.data.instance;
-        instance._Navigator.next();
+        if (!instance._Navigator.isDisabled() && !instance._nextDisabled) {
+            instance._Navigator.next();
+        }
+        else if (e.altKey) {
+            instance._Navigator.enableDev();
+            instance._Navigator.next();
+            instance._Navigator.disableDev();
+        }
     };
     /**
      * Invocado al hacerse click en el botón anterior. Invoca a _Navigator#prev
@@ -17792,7 +18707,14 @@ var HzNavbarComponent = /** @class */ (function (_super) {
      */
     HzNavbarComponent.prototype._onPrevClick = function (e) {
         var instance = e.data.instance;
-        instance._Navigator.prev();
+        if (!instance._Navigator.isDisabled() && !instance._prevDisabled) {
+            instance._Navigator.prev();
+        }
+        else if (e.altKey) {
+            instance._Navigator.enableDev();
+            instance._Navigator.prev();
+            instance._Navigator.disableDev();
+        }
     };
     HzNavbarComponent.prototype._onHomeClick = function (e) {
         var instance = e.data.instance;
@@ -17800,13 +18722,18 @@ var HzNavbarComponent = /** @class */ (function (_super) {
     };
     HzNavbarComponent.prototype._onExitClick = function (e) {
         var instance = e.data.instance;
-        instance._$exitDialog.dialog("open");
+        instance._exitDialog.open();
     };
     HzNavbarComponent.prototype._onCancelExit = function () {
-        this._$exitDialog.dialog("close");
+        this._exitDialog.close();
     };
     HzNavbarComponent.prototype._onConfirmExit = function () {
-        this._$exitDialog.dialog("close").dialog("destroy");
+        this._exitDialog.close();
+        this._exitDialog.destroy();
+        if (this._indexListDialog) {
+            this._indexListDialog.close();
+            this._indexListDialog.destroy();
+        }
         core_1.ScoFactory.getCurrentSco().exit();
     };
     HzNavbarComponent.prototype._onIndexClick = function (e) {
@@ -17815,7 +18742,7 @@ var HzNavbarComponent = /** @class */ (function (_super) {
             instance.closeIndexList();
         }
         else {
-            instance.openIndexList();
+            instance.openIndexList(e.altKey);
         }
     };
     /**
@@ -17827,6 +18754,32 @@ var HzNavbarComponent = /** @class */ (function (_super) {
         this._$progress.text(value + "%");
         this._$bar.css("transform", "scaleX(" + value / 100 + ")");
     };
+    HzNavbarComponent.prototype._disableActions = function () {
+        this._actionsDisabled = true;
+        this._$homeBtn.addClass(HzNavbarComponent_1.CLASS_DISABLED).prop("disabled", true);
+        this._$exitBtn.addClass(HzNavbarComponent_1.CLASS_DISABLED).prop("disabled", true);
+        this._$indexBtn.addClass(HzNavbarComponent_1.CLASS_DISABLED).prop("disabled", true);
+        if (this._indexListDialog) {
+            this._indexListDialog.close();
+            this._indexListDialog.disable();
+        }
+        if (this._exitDialog) {
+            this._exitDialog.close();
+            this._exitDialog.disable();
+        }
+    };
+    HzNavbarComponent.prototype._enableActions = function () {
+        this._$homeBtn.removeClass(HzNavbarComponent_1.CLASS_DISABLED).prop("disabled", false);
+        this._$exitBtn.removeClass(HzNavbarComponent_1.CLASS_DISABLED).prop("disabled", false);
+        this._$indexBtn.removeClass(HzNavbarComponent_1.CLASS_DISABLED).prop("disabled", false);
+        if (this._indexListDialog) {
+            this._indexListDialog.enable();
+        }
+        if (this._exitDialog) {
+            this._exitDialog.enable();
+        }
+        this._actionsDisabled = false;
+    };
     /**
      * Invocado al comenzar el cambio de página. Deshabilita la navegación durante el proceso
      * @param e
@@ -17837,13 +18790,42 @@ var HzNavbarComponent = /** @class */ (function (_super) {
     HzNavbarComponent.prototype._onPageChangeStart = function (e, newPage, oldPage) {
         if (!e.isDefaultPrevented()) {
             var instance = e.data.instance;
+            instance._disableActions();
             if (oldPage) {
                 var pageImplementation = instance._PageManager.getPage(oldPage.index), page = pageImplementation.getPage();
                 page.off("." + HzNavbarComponent_1.NAMESPACE);
             }
             instance._setCurrentPage(newPage.index);
-            instance._$prevBtn.attr("disabled", "disabled");
-            instance._$nextBtn.attr("disabled", "disabled");
+            instance._$prevBtn.addClass(HzNavbarComponent_1.CLASS_BTN_DISABLED);
+            instance._nextDisabled = true;
+            instance._$nextBtn.addClass(HzNavbarComponent_1.CLASS_BTN_DISABLED);
+            instance._prevDisabled = true;
+        }
+    };
+    HzNavbarComponent.prototype._onNextDisabledChange = function (e) {
+        e.data.instance._updateNextButtonState();
+    };
+    HzNavbarComponent.prototype._updateNextButtonState = function () {
+        this._setDisabledStylesForNext(this._Navigator.isDisabled() || this._Navigator.isNextDisabled() || this._currentPageIndex == this._numPages - 1);
+    };
+    HzNavbarComponent.prototype._setDisabledStylesForNext = function (disabled) {
+        if (disabled) {
+            this._$nextBtn.addClass(HzNavbarComponent_1.CLASS_BTN_DISABLED);
+            this._nextDisabled = true;
+        }
+        else {
+            this._$nextBtn.removeClass(HzNavbarComponent_1.CLASS_BTN_DISABLED);
+            this._nextDisabled = false;
+        }
+    };
+    HzNavbarComponent.prototype._setDisabledStylesForPrev = function (disabled) {
+        if (disabled) {
+            this._$prevBtn.addClass(HzNavbarComponent_1.CLASS_BTN_DISABLED);
+            this._prevDisabled = true;
+        }
+        else {
+            this._$prevBtn.removeClass(HzNavbarComponent_1.CLASS_BTN_DISABLED);
+            this._prevDisabled = false;
         }
     };
     /**
@@ -17852,30 +18834,12 @@ var HzNavbarComponent = /** @class */ (function (_super) {
      */
     HzNavbarComponent.prototype._updatePagerButtonState = function () {
         if (!this._Navigator.isDisabled()) {
-            if (this._currentPageIndex === 0) {
-                this._$prevBtn.attr("disabled", "disabled");
-                this._$nextBtn.removeAttr("disabled");
-            }
-            else if (this._currentPageIndex === this._numPages - 1) {
-                this._$nextBtn.attr("disabled", "disabled");
-                this._$prevBtn.removeAttr("disabled");
-            }
-            else {
-                this._$nextBtn.removeAttr("disabled");
-                this._$prevBtn.removeAttr("disabled");
-            }
-            if (!this._$nextBtn.prop("disabled")) {
-                if (this._Navigator.getCurrentPage().getController().isCompleted()) {
-                    this._$nextBtn.removeAttr("disabled");
-                }
-                else {
-                    this._$nextBtn.attr("disabled", "disabled");
-                }
-            }
+            this._setDisabledStylesForPrev(this._currentPageIndex === 0);
+            this._updateNextButtonState();
         }
         else {
-            this._$prevBtn.attr("disabled", "disabled");
-            this._$nextBtn.attr("disabled", "disabled");
+            this._setDisabledStylesForNext(true);
+            this._setDisabledStylesForPrev(true);
         }
     };
     /**
@@ -17887,13 +18851,18 @@ var HzNavbarComponent = /** @class */ (function (_super) {
      */
     HzNavbarComponent.prototype._onPageChangeEnd = function (e, newPage, oldPage) {
         var instance = e.data.instance;
-        instance._updatePagerButtonState();
-        instance.progress((instance._Navigator.getVisitedPages().length * 100) / instance._numPages);
+        //instance._updatePagerButtonState();
         var pageImplementation = instance._Navigator.getCurrentPage(), page = pageImplementation.getPage();
-        page.off("." + HzNavbarComponent_1.NAMESPACE).on(core_1.PageController.ON_COMPLETE_CHANGE + "." + HzNavbarComponent_1.NAMESPACE, { instance: instance }, instance._onPageCompleteChange);
+        instance._enableActions();
+        if (pageImplementation.isCompleted()) {
+            instance.progress(instance._Navigator.getProgressPercentage());
+        }
+        else {
+            page.off("." + HzNavbarComponent_1.NAMESPACE).on(core_1.PageController.ON_COMPLETE_CHANGE + "." + HzNavbarComponent_1.NAMESPACE, { instance: instance }, instance._onPageCompleteChange);
+        }
     };
     /**
-     * Invocado al completarse la página. Actualiza el estado del botón siguiente
+     * Invocado al completarse la página. Actualiza el estado del botón siguiente y del % de avance
      * @param e
      * @param completed
      * @private
@@ -17901,16 +18870,29 @@ var HzNavbarComponent = /** @class */ (function (_super) {
     HzNavbarComponent.prototype._onPageCompleteChange = function (e, completed) {
         if (completed) {
             var instance = e.data.instance;
-            var pageImplementation = instance._Navigator.getCurrentPage(), page = pageImplementation.getPage();
+            instance.progress(instance._Navigator.getProgressPercentage());
+            /*let pageImplementation = instance._Navigator.getCurrentPage(),
+                page = pageImplementation.getPage();
             if (instance._PageManager.getPageIndex(page.getName()) !== instance._PageManager.count() - 1) {
                 if (pageImplementation.getController().isCompleted()) {
-                    instance._$nextBtn.removeAttr("disabled");
+                    instance._$nextBtn.removeClass(HzNavbarComponent.CLASS_BTN_DISABLED);
+                    instance._nextDisabled = false;
+                } else {
+                    instance._$nextBtn.addClass(HzNavbarComponent.CLASS_BTN_DISABLED);
+                    instance._nextDisabled = true;
                 }
-                else {
-                    instance._$nextBtn.attr("disabled", "disabled");
-                }
-            }
+            }*/
         }
+    };
+    /**
+     * Invocado al cerrarse el dialogo. Restablece estilos
+     */
+    HzNavbarComponent.prototype._onDialogClosed = function (e) {
+        var instance = e.data.instance;
+        instance._indexListDialog.uiDialog.css("top", "");
+        instance._indexListDialog.uiDialog.css("left", "");
+        instance._indexListDialog.uiDialog.css("bottom", "");
+        instance._indexListDialog.uiDialog.css("right", "");
     };
     /**
      * Establece el valor a la cantidad de páginas y actualiza el texto del elemento
@@ -17955,13 +18937,19 @@ var HzNavbarComponent = /** @class */ (function (_super) {
     HzNavbarComponent.QUERY_INDEX_LIST_ITEM_CONTENT = "[data-" + HzNavbarComponent_1.PREFIX + "-index-list-item-content]";
     HzNavbarComponent.CLASS_PAGE_VISITED = "hz-navbar__page--visited";
     HzNavbarComponent.CLASS_PAGE_COMPLETED = "hz-navbar__page--completed";
+    HzNavbarComponent.CLASS_ACTIVE_PAGE = "hz-navbar__page--active";
     HzNavbarComponent.CLASS_LIST_INDEX_DIALOG = "hz-navbar__dialog hz-navbar__index-list-dialog";
     HzNavbarComponent.CLASS_LIST_EXIT_DIALOG = "hz-navbar__dialog hz-navbar__index-list-dialog";
+    HzNavbarComponent.CLASS_DISABLED = "hz-navbar--disabled";
+    HzNavbarComponent.CLASS_BTN_DISABLED = "hz-navbar__btn--disabled";
     HzNavbarComponent.DATA_PAGE = "hzNavbarPage";
     HzNavbarComponent.OPT_DIALOG_DEFAULTS = {
         autoOpen: false,
+        draggable: false,
+        resizable: false,
         show: "fade",
-        hide: "fade"
+        hide: "fade",
+        position: { my: "center", at: "center" }
     };
     HzNavbarComponent._DEFAULTS = {
         locale: {
@@ -17980,7 +18968,11 @@ var HzNavbarComponent = /** @class */ (function (_super) {
                 exitKo: "Cancelar"
             }
         },
-        defaultLang: "es"
+        touch: true,
+        maxRestTime: 2000,
+        escapeVelocity: 0.1,
+        defaultLang: "es",
+        reverseSwipeNavigation: true
     };
     HzNavbarComponent = HzNavbarComponent_1 = __decorate([
         core_1.Component({
@@ -36714,14 +37706,2664 @@ var widgetsTooltip = $.ui.tooltip;
 });
 return ___scope___.entry = "ui/widget.js";
 });
+FuseBox.pkg("hammerjs", {}, function(___scope___){
+___scope___.file("hammer.js", function(exports, require, module, __filename, __dirname){
+
+/*! Hammer.JS - v2.0.7 - 2016-04-22
+ * http://hammerjs.github.io/
+ *
+ * Copyright (c) 2016 Jorik Tangelder;
+ * Licensed under the MIT license */
+(function(window, document, exportName, undefined) {
+  'use strict';
+
+var VENDOR_PREFIXES = ['', 'webkit', 'Moz', 'MS', 'ms', 'o'];
+var TEST_ELEMENT = document.createElement('div');
+
+var TYPE_FUNCTION = 'function';
+
+var round = Math.round;
+var abs = Math.abs;
+var now = Date.now;
+
+/**
+ * set a timeout with a given scope
+ * @param {Function} fn
+ * @param {Number} timeout
+ * @param {Object} context
+ * @returns {number}
+ */
+function setTimeoutContext(fn, timeout, context) {
+    return setTimeout(bindFn(fn, context), timeout);
+}
+
+/**
+ * if the argument is an array, we want to execute the fn on each entry
+ * if it aint an array we don't want to do a thing.
+ * this is used by all the methods that accept a single and array argument.
+ * @param {*|Array} arg
+ * @param {String} fn
+ * @param {Object} [context]
+ * @returns {Boolean}
+ */
+function invokeArrayArg(arg, fn, context) {
+    if (Array.isArray(arg)) {
+        each(arg, context[fn], context);
+        return true;
+    }
+    return false;
+}
+
+/**
+ * walk objects and arrays
+ * @param {Object} obj
+ * @param {Function} iterator
+ * @param {Object} context
+ */
+function each(obj, iterator, context) {
+    var i;
+
+    if (!obj) {
+        return;
+    }
+
+    if (obj.forEach) {
+        obj.forEach(iterator, context);
+    } else if (obj.length !== undefined) {
+        i = 0;
+        while (i < obj.length) {
+            iterator.call(context, obj[i], i, obj);
+            i++;
+        }
+    } else {
+        for (i in obj) {
+            obj.hasOwnProperty(i) && iterator.call(context, obj[i], i, obj);
+        }
+    }
+}
+
+/**
+ * wrap a method with a deprecation warning and stack trace
+ * @param {Function} method
+ * @param {String} name
+ * @param {String} message
+ * @returns {Function} A new function wrapping the supplied method.
+ */
+function deprecate(method, name, message) {
+    var deprecationMessage = 'DEPRECATED METHOD: ' + name + '\n' + message + ' AT \n';
+    return function() {
+        var e = new Error('get-stack-trace');
+        var stack = e && e.stack ? e.stack.replace(/^[^\(]+?[\n$]/gm, '')
+            .replace(/^\s+at\s+/gm, '')
+            .replace(/^Object.<anonymous>\s*\(/gm, '{anonymous}()@') : 'Unknown Stack Trace';
+
+        var log = window.console && (window.console.warn || window.console.log);
+        if (log) {
+            log.call(window.console, deprecationMessage, stack);
+        }
+        return method.apply(this, arguments);
+    };
+}
+
+/**
+ * extend object.
+ * means that properties in dest will be overwritten by the ones in src.
+ * @param {Object} target
+ * @param {...Object} objects_to_assign
+ * @returns {Object} target
+ */
+var assign;
+if (typeof Object.assign !== 'function') {
+    assign = function assign(target) {
+        if (target === undefined || target === null) {
+            throw new TypeError('Cannot convert undefined or null to object');
+        }
+
+        var output = Object(target);
+        for (var index = 1; index < arguments.length; index++) {
+            var source = arguments[index];
+            if (source !== undefined && source !== null) {
+                for (var nextKey in source) {
+                    if (source.hasOwnProperty(nextKey)) {
+                        output[nextKey] = source[nextKey];
+                    }
+                }
+            }
+        }
+        return output;
+    };
+} else {
+    assign = Object.assign;
+}
+
+/**
+ * extend object.
+ * means that properties in dest will be overwritten by the ones in src.
+ * @param {Object} dest
+ * @param {Object} src
+ * @param {Boolean} [merge=false]
+ * @returns {Object} dest
+ */
+var extend = deprecate(function extend(dest, src, merge) {
+    var keys = Object.keys(src);
+    var i = 0;
+    while (i < keys.length) {
+        if (!merge || (merge && dest[keys[i]] === undefined)) {
+            dest[keys[i]] = src[keys[i]];
+        }
+        i++;
+    }
+    return dest;
+}, 'extend', 'Use `assign`.');
+
+/**
+ * merge the values from src in the dest.
+ * means that properties that exist in dest will not be overwritten by src
+ * @param {Object} dest
+ * @param {Object} src
+ * @returns {Object} dest
+ */
+var merge = deprecate(function merge(dest, src) {
+    return extend(dest, src, true);
+}, 'merge', 'Use `assign`.');
+
+/**
+ * simple class inheritance
+ * @param {Function} child
+ * @param {Function} base
+ * @param {Object} [properties]
+ */
+function inherit(child, base, properties) {
+    var baseP = base.prototype,
+        childP;
+
+    childP = child.prototype = Object.create(baseP);
+    childP.constructor = child;
+    childP._super = baseP;
+
+    if (properties) {
+        assign(childP, properties);
+    }
+}
+
+/**
+ * simple function bind
+ * @param {Function} fn
+ * @param {Object} context
+ * @returns {Function}
+ */
+function bindFn(fn, context) {
+    return function boundFn() {
+        return fn.apply(context, arguments);
+    };
+}
+
+/**
+ * let a boolean value also be a function that must return a boolean
+ * this first item in args will be used as the context
+ * @param {Boolean|Function} val
+ * @param {Array} [args]
+ * @returns {Boolean}
+ */
+function boolOrFn(val, args) {
+    if (typeof val == TYPE_FUNCTION) {
+        return val.apply(args ? args[0] || undefined : undefined, args);
+    }
+    return val;
+}
+
+/**
+ * use the val2 when val1 is undefined
+ * @param {*} val1
+ * @param {*} val2
+ * @returns {*}
+ */
+function ifUndefined(val1, val2) {
+    return (val1 === undefined) ? val2 : val1;
+}
+
+/**
+ * addEventListener with multiple events at once
+ * @param {EventTarget} target
+ * @param {String} types
+ * @param {Function} handler
+ */
+function addEventListeners(target, types, handler) {
+    each(splitStr(types), function(type) {
+        target.addEventListener(type, handler, false);
+    });
+}
+
+/**
+ * removeEventListener with multiple events at once
+ * @param {EventTarget} target
+ * @param {String} types
+ * @param {Function} handler
+ */
+function removeEventListeners(target, types, handler) {
+    each(splitStr(types), function(type) {
+        target.removeEventListener(type, handler, false);
+    });
+}
+
+/**
+ * find if a node is in the given parent
+ * @method hasParent
+ * @param {HTMLElement} node
+ * @param {HTMLElement} parent
+ * @return {Boolean} found
+ */
+function hasParent(node, parent) {
+    while (node) {
+        if (node == parent) {
+            return true;
+        }
+        node = node.parentNode;
+    }
+    return false;
+}
+
+/**
+ * small indexOf wrapper
+ * @param {String} str
+ * @param {String} find
+ * @returns {Boolean} found
+ */
+function inStr(str, find) {
+    return str.indexOf(find) > -1;
+}
+
+/**
+ * split string on whitespace
+ * @param {String} str
+ * @returns {Array} words
+ */
+function splitStr(str) {
+    return str.trim().split(/\s+/g);
+}
+
+/**
+ * find if a array contains the object using indexOf or a simple polyFill
+ * @param {Array} src
+ * @param {String} find
+ * @param {String} [findByKey]
+ * @return {Boolean|Number} false when not found, or the index
+ */
+function inArray(src, find, findByKey) {
+    if (src.indexOf && !findByKey) {
+        return src.indexOf(find);
+    } else {
+        var i = 0;
+        while (i < src.length) {
+            if ((findByKey && src[i][findByKey] == find) || (!findByKey && src[i] === find)) {
+                return i;
+            }
+            i++;
+        }
+        return -1;
+    }
+}
+
+/**
+ * convert array-like objects to real arrays
+ * @param {Object} obj
+ * @returns {Array}
+ */
+function toArray(obj) {
+    return Array.prototype.slice.call(obj, 0);
+}
+
+/**
+ * unique array with objects based on a key (like 'id') or just by the array's value
+ * @param {Array} src [{id:1},{id:2},{id:1}]
+ * @param {String} [key]
+ * @param {Boolean} [sort=False]
+ * @returns {Array} [{id:1},{id:2}]
+ */
+function uniqueArray(src, key, sort) {
+    var results = [];
+    var values = [];
+    var i = 0;
+
+    while (i < src.length) {
+        var val = key ? src[i][key] : src[i];
+        if (inArray(values, val) < 0) {
+            results.push(src[i]);
+        }
+        values[i] = val;
+        i++;
+    }
+
+    if (sort) {
+        if (!key) {
+            results = results.sort();
+        } else {
+            results = results.sort(function sortUniqueArray(a, b) {
+                return a[key] > b[key];
+            });
+        }
+    }
+
+    return results;
+}
+
+/**
+ * get the prefixed property
+ * @param {Object} obj
+ * @param {String} property
+ * @returns {String|Undefined} prefixed
+ */
+function prefixed(obj, property) {
+    var prefix, prop;
+    var camelProp = property[0].toUpperCase() + property.slice(1);
+
+    var i = 0;
+    while (i < VENDOR_PREFIXES.length) {
+        prefix = VENDOR_PREFIXES[i];
+        prop = (prefix) ? prefix + camelProp : property;
+
+        if (prop in obj) {
+            return prop;
+        }
+        i++;
+    }
+    return undefined;
+}
+
+/**
+ * get a unique id
+ * @returns {number} uniqueId
+ */
+var _uniqueId = 1;
+function uniqueId() {
+    return _uniqueId++;
+}
+
+/**
+ * get the window object of an element
+ * @param {HTMLElement} element
+ * @returns {DocumentView|Window}
+ */
+function getWindowForElement(element) {
+    var doc = element.ownerDocument || element;
+    return (doc.defaultView || doc.parentWindow || window);
+}
+
+var MOBILE_REGEX = /mobile|tablet|ip(ad|hone|od)|android/i;
+
+var SUPPORT_TOUCH = ('ontouchstart' in window);
+var SUPPORT_POINTER_EVENTS = prefixed(window, 'PointerEvent') !== undefined;
+var SUPPORT_ONLY_TOUCH = SUPPORT_TOUCH && MOBILE_REGEX.test(navigator.userAgent);
+
+var INPUT_TYPE_TOUCH = 'touch';
+var INPUT_TYPE_PEN = 'pen';
+var INPUT_TYPE_MOUSE = 'mouse';
+var INPUT_TYPE_KINECT = 'kinect';
+
+var COMPUTE_INTERVAL = 25;
+
+var INPUT_START = 1;
+var INPUT_MOVE = 2;
+var INPUT_END = 4;
+var INPUT_CANCEL = 8;
+
+var DIRECTION_NONE = 1;
+var DIRECTION_LEFT = 2;
+var DIRECTION_RIGHT = 4;
+var DIRECTION_UP = 8;
+var DIRECTION_DOWN = 16;
+
+var DIRECTION_HORIZONTAL = DIRECTION_LEFT | DIRECTION_RIGHT;
+var DIRECTION_VERTICAL = DIRECTION_UP | DIRECTION_DOWN;
+var DIRECTION_ALL = DIRECTION_HORIZONTAL | DIRECTION_VERTICAL;
+
+var PROPS_XY = ['x', 'y'];
+var PROPS_CLIENT_XY = ['clientX', 'clientY'];
+
+/**
+ * create new input type manager
+ * @param {Manager} manager
+ * @param {Function} callback
+ * @returns {Input}
+ * @constructor
+ */
+function Input(manager, callback) {
+    var self = this;
+    this.manager = manager;
+    this.callback = callback;
+    this.element = manager.element;
+    this.target = manager.options.inputTarget;
+
+    // smaller wrapper around the handler, for the scope and the enabled state of the manager,
+    // so when disabled the input events are completely bypassed.
+    this.domHandler = function(ev) {
+        if (boolOrFn(manager.options.enable, [manager])) {
+            self.handler(ev);
+        }
+    };
+
+    this.init();
+
+}
+
+Input.prototype = {
+    /**
+     * should handle the inputEvent data and trigger the callback
+     * @virtual
+     */
+    handler: function() { },
+
+    /**
+     * bind the events
+     */
+    init: function() {
+        this.evEl && addEventListeners(this.element, this.evEl, this.domHandler);
+        this.evTarget && addEventListeners(this.target, this.evTarget, this.domHandler);
+        this.evWin && addEventListeners(getWindowForElement(this.element), this.evWin, this.domHandler);
+    },
+
+    /**
+     * unbind the events
+     */
+    destroy: function() {
+        this.evEl && removeEventListeners(this.element, this.evEl, this.domHandler);
+        this.evTarget && removeEventListeners(this.target, this.evTarget, this.domHandler);
+        this.evWin && removeEventListeners(getWindowForElement(this.element), this.evWin, this.domHandler);
+    }
+};
+
+/**
+ * create new input type manager
+ * called by the Manager constructor
+ * @param {Hammer} manager
+ * @returns {Input}
+ */
+function createInputInstance(manager) {
+    var Type;
+    var inputClass = manager.options.inputClass;
+
+    if (inputClass) {
+        Type = inputClass;
+    } else if (SUPPORT_POINTER_EVENTS) {
+        Type = PointerEventInput;
+    } else if (SUPPORT_ONLY_TOUCH) {
+        Type = TouchInput;
+    } else if (!SUPPORT_TOUCH) {
+        Type = MouseInput;
+    } else {
+        Type = TouchMouseInput;
+    }
+    return new (Type)(manager, inputHandler);
+}
+
+/**
+ * handle input events
+ * @param {Manager} manager
+ * @param {String} eventType
+ * @param {Object} input
+ */
+function inputHandler(manager, eventType, input) {
+    var pointersLen = input.pointers.length;
+    var changedPointersLen = input.changedPointers.length;
+    var isFirst = (eventType & INPUT_START && (pointersLen - changedPointersLen === 0));
+    var isFinal = (eventType & (INPUT_END | INPUT_CANCEL) && (pointersLen - changedPointersLen === 0));
+
+    input.isFirst = !!isFirst;
+    input.isFinal = !!isFinal;
+
+    if (isFirst) {
+        manager.session = {};
+    }
+
+    // source event is the normalized value of the domEvents
+    // like 'touchstart, mouseup, pointerdown'
+    input.eventType = eventType;
+
+    // compute scale, rotation etc
+    computeInputData(manager, input);
+
+    // emit secret event
+    manager.emit('hammer.input', input);
+
+    manager.recognize(input);
+    manager.session.prevInput = input;
+}
+
+/**
+ * extend the data with some usable properties like scale, rotate, velocity etc
+ * @param {Object} manager
+ * @param {Object} input
+ */
+function computeInputData(manager, input) {
+    var session = manager.session;
+    var pointers = input.pointers;
+    var pointersLength = pointers.length;
+
+    // store the first input to calculate the distance and direction
+    if (!session.firstInput) {
+        session.firstInput = simpleCloneInputData(input);
+    }
+
+    // to compute scale and rotation we need to store the multiple touches
+    if (pointersLength > 1 && !session.firstMultiple) {
+        session.firstMultiple = simpleCloneInputData(input);
+    } else if (pointersLength === 1) {
+        session.firstMultiple = false;
+    }
+
+    var firstInput = session.firstInput;
+    var firstMultiple = session.firstMultiple;
+    var offsetCenter = firstMultiple ? firstMultiple.center : firstInput.center;
+
+    var center = input.center = getCenter(pointers);
+    input.timeStamp = now();
+    input.deltaTime = input.timeStamp - firstInput.timeStamp;
+
+    input.angle = getAngle(offsetCenter, center);
+    input.distance = getDistance(offsetCenter, center);
+
+    computeDeltaXY(session, input);
+    input.offsetDirection = getDirection(input.deltaX, input.deltaY);
+
+    var overallVelocity = getVelocity(input.deltaTime, input.deltaX, input.deltaY);
+    input.overallVelocityX = overallVelocity.x;
+    input.overallVelocityY = overallVelocity.y;
+    input.overallVelocity = (abs(overallVelocity.x) > abs(overallVelocity.y)) ? overallVelocity.x : overallVelocity.y;
+
+    input.scale = firstMultiple ? getScale(firstMultiple.pointers, pointers) : 1;
+    input.rotation = firstMultiple ? getRotation(firstMultiple.pointers, pointers) : 0;
+
+    input.maxPointers = !session.prevInput ? input.pointers.length : ((input.pointers.length >
+        session.prevInput.maxPointers) ? input.pointers.length : session.prevInput.maxPointers);
+
+    computeIntervalInputData(session, input);
+
+    // find the correct target
+    var target = manager.element;
+    if (hasParent(input.srcEvent.target, target)) {
+        target = input.srcEvent.target;
+    }
+    input.target = target;
+}
+
+function computeDeltaXY(session, input) {
+    var center = input.center;
+    var offset = session.offsetDelta || {};
+    var prevDelta = session.prevDelta || {};
+    var prevInput = session.prevInput || {};
+
+    if (input.eventType === INPUT_START || prevInput.eventType === INPUT_END) {
+        prevDelta = session.prevDelta = {
+            x: prevInput.deltaX || 0,
+            y: prevInput.deltaY || 0
+        };
+
+        offset = session.offsetDelta = {
+            x: center.x,
+            y: center.y
+        };
+    }
+
+    input.deltaX = prevDelta.x + (center.x - offset.x);
+    input.deltaY = prevDelta.y + (center.y - offset.y);
+}
+
+/**
+ * velocity is calculated every x ms
+ * @param {Object} session
+ * @param {Object} input
+ */
+function computeIntervalInputData(session, input) {
+    var last = session.lastInterval || input,
+        deltaTime = input.timeStamp - last.timeStamp,
+        velocity, velocityX, velocityY, direction;
+
+    if (input.eventType != INPUT_CANCEL && (deltaTime > COMPUTE_INTERVAL || last.velocity === undefined)) {
+        var deltaX = input.deltaX - last.deltaX;
+        var deltaY = input.deltaY - last.deltaY;
+
+        var v = getVelocity(deltaTime, deltaX, deltaY);
+        velocityX = v.x;
+        velocityY = v.y;
+        velocity = (abs(v.x) > abs(v.y)) ? v.x : v.y;
+        direction = getDirection(deltaX, deltaY);
+
+        session.lastInterval = input;
+    } else {
+        // use latest velocity info if it doesn't overtake a minimum period
+        velocity = last.velocity;
+        velocityX = last.velocityX;
+        velocityY = last.velocityY;
+        direction = last.direction;
+    }
+
+    input.velocity = velocity;
+    input.velocityX = velocityX;
+    input.velocityY = velocityY;
+    input.direction = direction;
+}
+
+/**
+ * create a simple clone from the input used for storage of firstInput and firstMultiple
+ * @param {Object} input
+ * @returns {Object} clonedInputData
+ */
+function simpleCloneInputData(input) {
+    // make a simple copy of the pointers because we will get a reference if we don't
+    // we only need clientXY for the calculations
+    var pointers = [];
+    var i = 0;
+    while (i < input.pointers.length) {
+        pointers[i] = {
+            clientX: round(input.pointers[i].clientX),
+            clientY: round(input.pointers[i].clientY)
+        };
+        i++;
+    }
+
+    return {
+        timeStamp: now(),
+        pointers: pointers,
+        center: getCenter(pointers),
+        deltaX: input.deltaX,
+        deltaY: input.deltaY
+    };
+}
+
+/**
+ * get the center of all the pointers
+ * @param {Array} pointers
+ * @return {Object} center contains `x` and `y` properties
+ */
+function getCenter(pointers) {
+    var pointersLength = pointers.length;
+
+    // no need to loop when only one touch
+    if (pointersLength === 1) {
+        return {
+            x: round(pointers[0].clientX),
+            y: round(pointers[0].clientY)
+        };
+    }
+
+    var x = 0, y = 0, i = 0;
+    while (i < pointersLength) {
+        x += pointers[i].clientX;
+        y += pointers[i].clientY;
+        i++;
+    }
+
+    return {
+        x: round(x / pointersLength),
+        y: round(y / pointersLength)
+    };
+}
+
+/**
+ * calculate the velocity between two points. unit is in px per ms.
+ * @param {Number} deltaTime
+ * @param {Number} x
+ * @param {Number} y
+ * @return {Object} velocity `x` and `y`
+ */
+function getVelocity(deltaTime, x, y) {
+    return {
+        x: x / deltaTime || 0,
+        y: y / deltaTime || 0
+    };
+}
+
+/**
+ * get the direction between two points
+ * @param {Number} x
+ * @param {Number} y
+ * @return {Number} direction
+ */
+function getDirection(x, y) {
+    if (x === y) {
+        return DIRECTION_NONE;
+    }
+
+    if (abs(x) >= abs(y)) {
+        return x < 0 ? DIRECTION_LEFT : DIRECTION_RIGHT;
+    }
+    return y < 0 ? DIRECTION_UP : DIRECTION_DOWN;
+}
+
+/**
+ * calculate the absolute distance between two points
+ * @param {Object} p1 {x, y}
+ * @param {Object} p2 {x, y}
+ * @param {Array} [props] containing x and y keys
+ * @return {Number} distance
+ */
+function getDistance(p1, p2, props) {
+    if (!props) {
+        props = PROPS_XY;
+    }
+    var x = p2[props[0]] - p1[props[0]],
+        y = p2[props[1]] - p1[props[1]];
+
+    return Math.sqrt((x * x) + (y * y));
+}
+
+/**
+ * calculate the angle between two coordinates
+ * @param {Object} p1
+ * @param {Object} p2
+ * @param {Array} [props] containing x and y keys
+ * @return {Number} angle
+ */
+function getAngle(p1, p2, props) {
+    if (!props) {
+        props = PROPS_XY;
+    }
+    var x = p2[props[0]] - p1[props[0]],
+        y = p2[props[1]] - p1[props[1]];
+    return Math.atan2(y, x) * 180 / Math.PI;
+}
+
+/**
+ * calculate the rotation degrees between two pointersets
+ * @param {Array} start array of pointers
+ * @param {Array} end array of pointers
+ * @return {Number} rotation
+ */
+function getRotation(start, end) {
+    return getAngle(end[1], end[0], PROPS_CLIENT_XY) + getAngle(start[1], start[0], PROPS_CLIENT_XY);
+}
+
+/**
+ * calculate the scale factor between two pointersets
+ * no scale is 1, and goes down to 0 when pinched together, and bigger when pinched out
+ * @param {Array} start array of pointers
+ * @param {Array} end array of pointers
+ * @return {Number} scale
+ */
+function getScale(start, end) {
+    return getDistance(end[0], end[1], PROPS_CLIENT_XY) / getDistance(start[0], start[1], PROPS_CLIENT_XY);
+}
+
+var MOUSE_INPUT_MAP = {
+    mousedown: INPUT_START,
+    mousemove: INPUT_MOVE,
+    mouseup: INPUT_END
+};
+
+var MOUSE_ELEMENT_EVENTS = 'mousedown';
+var MOUSE_WINDOW_EVENTS = 'mousemove mouseup';
+
+/**
+ * Mouse events input
+ * @constructor
+ * @extends Input
+ */
+function MouseInput() {
+    this.evEl = MOUSE_ELEMENT_EVENTS;
+    this.evWin = MOUSE_WINDOW_EVENTS;
+
+    this.pressed = false; // mousedown state
+
+    Input.apply(this, arguments);
+}
+
+inherit(MouseInput, Input, {
+    /**
+     * handle mouse events
+     * @param {Object} ev
+     */
+    handler: function MEhandler(ev) {
+        var eventType = MOUSE_INPUT_MAP[ev.type];
+
+        // on start we want to have the left mouse button down
+        if (eventType & INPUT_START && ev.button === 0) {
+            this.pressed = true;
+        }
+
+        if (eventType & INPUT_MOVE && ev.which !== 1) {
+            eventType = INPUT_END;
+        }
+
+        // mouse must be down
+        if (!this.pressed) {
+            return;
+        }
+
+        if (eventType & INPUT_END) {
+            this.pressed = false;
+        }
+
+        this.callback(this.manager, eventType, {
+            pointers: [ev],
+            changedPointers: [ev],
+            pointerType: INPUT_TYPE_MOUSE,
+            srcEvent: ev
+        });
+    }
+});
+
+var POINTER_INPUT_MAP = {
+    pointerdown: INPUT_START,
+    pointermove: INPUT_MOVE,
+    pointerup: INPUT_END,
+    pointercancel: INPUT_CANCEL,
+    pointerout: INPUT_CANCEL
+};
+
+// in IE10 the pointer types is defined as an enum
+var IE10_POINTER_TYPE_ENUM = {
+    2: INPUT_TYPE_TOUCH,
+    3: INPUT_TYPE_PEN,
+    4: INPUT_TYPE_MOUSE,
+    5: INPUT_TYPE_KINECT // see https://twitter.com/jacobrossi/status/480596438489890816
+};
+
+var POINTER_ELEMENT_EVENTS = 'pointerdown';
+var POINTER_WINDOW_EVENTS = 'pointermove pointerup pointercancel';
+
+// IE10 has prefixed support, and case-sensitive
+if (window.MSPointerEvent && !window.PointerEvent) {
+    POINTER_ELEMENT_EVENTS = 'MSPointerDown';
+    POINTER_WINDOW_EVENTS = 'MSPointerMove MSPointerUp MSPointerCancel';
+}
+
+/**
+ * Pointer events input
+ * @constructor
+ * @extends Input
+ */
+function PointerEventInput() {
+    this.evEl = POINTER_ELEMENT_EVENTS;
+    this.evWin = POINTER_WINDOW_EVENTS;
+
+    Input.apply(this, arguments);
+
+    this.store = (this.manager.session.pointerEvents = []);
+}
+
+inherit(PointerEventInput, Input, {
+    /**
+     * handle mouse events
+     * @param {Object} ev
+     */
+    handler: function PEhandler(ev) {
+        var store = this.store;
+        var removePointer = false;
+
+        var eventTypeNormalized = ev.type.toLowerCase().replace('ms', '');
+        var eventType = POINTER_INPUT_MAP[eventTypeNormalized];
+        var pointerType = IE10_POINTER_TYPE_ENUM[ev.pointerType] || ev.pointerType;
+
+        var isTouch = (pointerType == INPUT_TYPE_TOUCH);
+
+        // get index of the event in the store
+        var storeIndex = inArray(store, ev.pointerId, 'pointerId');
+
+        // start and mouse must be down
+        if (eventType & INPUT_START && (ev.button === 0 || isTouch)) {
+            if (storeIndex < 0) {
+                store.push(ev);
+                storeIndex = store.length - 1;
+            }
+        } else if (eventType & (INPUT_END | INPUT_CANCEL)) {
+            removePointer = true;
+        }
+
+        // it not found, so the pointer hasn't been down (so it's probably a hover)
+        if (storeIndex < 0) {
+            return;
+        }
+
+        // update the event in the store
+        store[storeIndex] = ev;
+
+        this.callback(this.manager, eventType, {
+            pointers: store,
+            changedPointers: [ev],
+            pointerType: pointerType,
+            srcEvent: ev
+        });
+
+        if (removePointer) {
+            // remove from the store
+            store.splice(storeIndex, 1);
+        }
+    }
+});
+
+var SINGLE_TOUCH_INPUT_MAP = {
+    touchstart: INPUT_START,
+    touchmove: INPUT_MOVE,
+    touchend: INPUT_END,
+    touchcancel: INPUT_CANCEL
+};
+
+var SINGLE_TOUCH_TARGET_EVENTS = 'touchstart';
+var SINGLE_TOUCH_WINDOW_EVENTS = 'touchstart touchmove touchend touchcancel';
+
+/**
+ * Touch events input
+ * @constructor
+ * @extends Input
+ */
+function SingleTouchInput() {
+    this.evTarget = SINGLE_TOUCH_TARGET_EVENTS;
+    this.evWin = SINGLE_TOUCH_WINDOW_EVENTS;
+    this.started = false;
+
+    Input.apply(this, arguments);
+}
+
+inherit(SingleTouchInput, Input, {
+    handler: function TEhandler(ev) {
+        var type = SINGLE_TOUCH_INPUT_MAP[ev.type];
+
+        // should we handle the touch events?
+        if (type === INPUT_START) {
+            this.started = true;
+        }
+
+        if (!this.started) {
+            return;
+        }
+
+        var touches = normalizeSingleTouches.call(this, ev, type);
+
+        // when done, reset the started state
+        if (type & (INPUT_END | INPUT_CANCEL) && touches[0].length - touches[1].length === 0) {
+            this.started = false;
+        }
+
+        this.callback(this.manager, type, {
+            pointers: touches[0],
+            changedPointers: touches[1],
+            pointerType: INPUT_TYPE_TOUCH,
+            srcEvent: ev
+        });
+    }
+});
+
+/**
+ * @this {TouchInput}
+ * @param {Object} ev
+ * @param {Number} type flag
+ * @returns {undefined|Array} [all, changed]
+ */
+function normalizeSingleTouches(ev, type) {
+    var all = toArray(ev.touches);
+    var changed = toArray(ev.changedTouches);
+
+    if (type & (INPUT_END | INPUT_CANCEL)) {
+        all = uniqueArray(all.concat(changed), 'identifier', true);
+    }
+
+    return [all, changed];
+}
+
+var TOUCH_INPUT_MAP = {
+    touchstart: INPUT_START,
+    touchmove: INPUT_MOVE,
+    touchend: INPUT_END,
+    touchcancel: INPUT_CANCEL
+};
+
+var TOUCH_TARGET_EVENTS = 'touchstart touchmove touchend touchcancel';
+
+/**
+ * Multi-user touch events input
+ * @constructor
+ * @extends Input
+ */
+function TouchInput() {
+    this.evTarget = TOUCH_TARGET_EVENTS;
+    this.targetIds = {};
+
+    Input.apply(this, arguments);
+}
+
+inherit(TouchInput, Input, {
+    handler: function MTEhandler(ev) {
+        var type = TOUCH_INPUT_MAP[ev.type];
+        var touches = getTouches.call(this, ev, type);
+        if (!touches) {
+            return;
+        }
+
+        this.callback(this.manager, type, {
+            pointers: touches[0],
+            changedPointers: touches[1],
+            pointerType: INPUT_TYPE_TOUCH,
+            srcEvent: ev
+        });
+    }
+});
+
+/**
+ * @this {TouchInput}
+ * @param {Object} ev
+ * @param {Number} type flag
+ * @returns {undefined|Array} [all, changed]
+ */
+function getTouches(ev, type) {
+    var allTouches = toArray(ev.touches);
+    var targetIds = this.targetIds;
+
+    // when there is only one touch, the process can be simplified
+    if (type & (INPUT_START | INPUT_MOVE) && allTouches.length === 1) {
+        targetIds[allTouches[0].identifier] = true;
+        return [allTouches, allTouches];
+    }
+
+    var i,
+        targetTouches,
+        changedTouches = toArray(ev.changedTouches),
+        changedTargetTouches = [],
+        target = this.target;
+
+    // get target touches from touches
+    targetTouches = allTouches.filter(function(touch) {
+        return hasParent(touch.target, target);
+    });
+
+    // collect touches
+    if (type === INPUT_START) {
+        i = 0;
+        while (i < targetTouches.length) {
+            targetIds[targetTouches[i].identifier] = true;
+            i++;
+        }
+    }
+
+    // filter changed touches to only contain touches that exist in the collected target ids
+    i = 0;
+    while (i < changedTouches.length) {
+        if (targetIds[changedTouches[i].identifier]) {
+            changedTargetTouches.push(changedTouches[i]);
+        }
+
+        // cleanup removed touches
+        if (type & (INPUT_END | INPUT_CANCEL)) {
+            delete targetIds[changedTouches[i].identifier];
+        }
+        i++;
+    }
+
+    if (!changedTargetTouches.length) {
+        return;
+    }
+
+    return [
+        // merge targetTouches with changedTargetTouches so it contains ALL touches, including 'end' and 'cancel'
+        uniqueArray(targetTouches.concat(changedTargetTouches), 'identifier', true),
+        changedTargetTouches
+    ];
+}
+
+/**
+ * Combined touch and mouse input
+ *
+ * Touch has a higher priority then mouse, and while touching no mouse events are allowed.
+ * This because touch devices also emit mouse events while doing a touch.
+ *
+ * @constructor
+ * @extends Input
+ */
+
+var DEDUP_TIMEOUT = 2500;
+var DEDUP_DISTANCE = 25;
+
+function TouchMouseInput() {
+    Input.apply(this, arguments);
+
+    var handler = bindFn(this.handler, this);
+    this.touch = new TouchInput(this.manager, handler);
+    this.mouse = new MouseInput(this.manager, handler);
+
+    this.primaryTouch = null;
+    this.lastTouches = [];
+}
+
+inherit(TouchMouseInput, Input, {
+    /**
+     * handle mouse and touch events
+     * @param {Hammer} manager
+     * @param {String} inputEvent
+     * @param {Object} inputData
+     */
+    handler: function TMEhandler(manager, inputEvent, inputData) {
+        var isTouch = (inputData.pointerType == INPUT_TYPE_TOUCH),
+            isMouse = (inputData.pointerType == INPUT_TYPE_MOUSE);
+
+        if (isMouse && inputData.sourceCapabilities && inputData.sourceCapabilities.firesTouchEvents) {
+            return;
+        }
+
+        // when we're in a touch event, record touches to  de-dupe synthetic mouse event
+        if (isTouch) {
+            recordTouches.call(this, inputEvent, inputData);
+        } else if (isMouse && isSyntheticEvent.call(this, inputData)) {
+            return;
+        }
+
+        this.callback(manager, inputEvent, inputData);
+    },
+
+    /**
+     * remove the event listeners
+     */
+    destroy: function destroy() {
+        this.touch.destroy();
+        this.mouse.destroy();
+    }
+});
+
+function recordTouches(eventType, eventData) {
+    if (eventType & INPUT_START) {
+        this.primaryTouch = eventData.changedPointers[0].identifier;
+        setLastTouch.call(this, eventData);
+    } else if (eventType & (INPUT_END | INPUT_CANCEL)) {
+        setLastTouch.call(this, eventData);
+    }
+}
+
+function setLastTouch(eventData) {
+    var touch = eventData.changedPointers[0];
+
+    if (touch.identifier === this.primaryTouch) {
+        var lastTouch = {x: touch.clientX, y: touch.clientY};
+        this.lastTouches.push(lastTouch);
+        var lts = this.lastTouches;
+        var removeLastTouch = function() {
+            var i = lts.indexOf(lastTouch);
+            if (i > -1) {
+                lts.splice(i, 1);
+            }
+        };
+        setTimeout(removeLastTouch, DEDUP_TIMEOUT);
+    }
+}
+
+function isSyntheticEvent(eventData) {
+    var x = eventData.srcEvent.clientX, y = eventData.srcEvent.clientY;
+    for (var i = 0; i < this.lastTouches.length; i++) {
+        var t = this.lastTouches[i];
+        var dx = Math.abs(x - t.x), dy = Math.abs(y - t.y);
+        if (dx <= DEDUP_DISTANCE && dy <= DEDUP_DISTANCE) {
+            return true;
+        }
+    }
+    return false;
+}
+
+var PREFIXED_TOUCH_ACTION = prefixed(TEST_ELEMENT.style, 'touchAction');
+var NATIVE_TOUCH_ACTION = PREFIXED_TOUCH_ACTION !== undefined;
+
+// magical touchAction value
+var TOUCH_ACTION_COMPUTE = 'compute';
+var TOUCH_ACTION_AUTO = 'auto';
+var TOUCH_ACTION_MANIPULATION = 'manipulation'; // not implemented
+var TOUCH_ACTION_NONE = 'none';
+var TOUCH_ACTION_PAN_X = 'pan-x';
+var TOUCH_ACTION_PAN_Y = 'pan-y';
+var TOUCH_ACTION_MAP = getTouchActionProps();
+
+/**
+ * Touch Action
+ * sets the touchAction property or uses the js alternative
+ * @param {Manager} manager
+ * @param {String} value
+ * @constructor
+ */
+function TouchAction(manager, value) {
+    this.manager = manager;
+    this.set(value);
+}
+
+TouchAction.prototype = {
+    /**
+     * set the touchAction value on the element or enable the polyfill
+     * @param {String} value
+     */
+    set: function(value) {
+        // find out the touch-action by the event handlers
+        if (value == TOUCH_ACTION_COMPUTE) {
+            value = this.compute();
+        }
+
+        if (NATIVE_TOUCH_ACTION && this.manager.element.style && TOUCH_ACTION_MAP[value]) {
+            this.manager.element.style[PREFIXED_TOUCH_ACTION] = value;
+        }
+        this.actions = value.toLowerCase().trim();
+    },
+
+    /**
+     * just re-set the touchAction value
+     */
+    update: function() {
+        this.set(this.manager.options.touchAction);
+    },
+
+    /**
+     * compute the value for the touchAction property based on the recognizer's settings
+     * @returns {String} value
+     */
+    compute: function() {
+        var actions = [];
+        each(this.manager.recognizers, function(recognizer) {
+            if (boolOrFn(recognizer.options.enable, [recognizer])) {
+                actions = actions.concat(recognizer.getTouchAction());
+            }
+        });
+        return cleanTouchActions(actions.join(' '));
+    },
+
+    /**
+     * this method is called on each input cycle and provides the preventing of the browser behavior
+     * @param {Object} input
+     */
+    preventDefaults: function(input) {
+        var srcEvent = input.srcEvent;
+        var direction = input.offsetDirection;
+
+        // if the touch action did prevented once this session
+        if (this.manager.session.prevented) {
+            srcEvent.preventDefault();
+            return;
+        }
+
+        var actions = this.actions;
+        var hasNone = inStr(actions, TOUCH_ACTION_NONE) && !TOUCH_ACTION_MAP[TOUCH_ACTION_NONE];
+        var hasPanY = inStr(actions, TOUCH_ACTION_PAN_Y) && !TOUCH_ACTION_MAP[TOUCH_ACTION_PAN_Y];
+        var hasPanX = inStr(actions, TOUCH_ACTION_PAN_X) && !TOUCH_ACTION_MAP[TOUCH_ACTION_PAN_X];
+
+        if (hasNone) {
+            //do not prevent defaults if this is a tap gesture
+
+            var isTapPointer = input.pointers.length === 1;
+            var isTapMovement = input.distance < 2;
+            var isTapTouchTime = input.deltaTime < 250;
+
+            if (isTapPointer && isTapMovement && isTapTouchTime) {
+                return;
+            }
+        }
+
+        if (hasPanX && hasPanY) {
+            // `pan-x pan-y` means browser handles all scrolling/panning, do not prevent
+            return;
+        }
+
+        if (hasNone ||
+            (hasPanY && direction & DIRECTION_HORIZONTAL) ||
+            (hasPanX && direction & DIRECTION_VERTICAL)) {
+            return this.preventSrc(srcEvent);
+        }
+    },
+
+    /**
+     * call preventDefault to prevent the browser's default behavior (scrolling in most cases)
+     * @param {Object} srcEvent
+     */
+    preventSrc: function(srcEvent) {
+        this.manager.session.prevented = true;
+        srcEvent.preventDefault();
+    }
+};
+
+/**
+ * when the touchActions are collected they are not a valid value, so we need to clean things up. *
+ * @param {String} actions
+ * @returns {*}
+ */
+function cleanTouchActions(actions) {
+    // none
+    if (inStr(actions, TOUCH_ACTION_NONE)) {
+        return TOUCH_ACTION_NONE;
+    }
+
+    var hasPanX = inStr(actions, TOUCH_ACTION_PAN_X);
+    var hasPanY = inStr(actions, TOUCH_ACTION_PAN_Y);
+
+    // if both pan-x and pan-y are set (different recognizers
+    // for different directions, e.g. horizontal pan but vertical swipe?)
+    // we need none (as otherwise with pan-x pan-y combined none of these
+    // recognizers will work, since the browser would handle all panning
+    if (hasPanX && hasPanY) {
+        return TOUCH_ACTION_NONE;
+    }
+
+    // pan-x OR pan-y
+    if (hasPanX || hasPanY) {
+        return hasPanX ? TOUCH_ACTION_PAN_X : TOUCH_ACTION_PAN_Y;
+    }
+
+    // manipulation
+    if (inStr(actions, TOUCH_ACTION_MANIPULATION)) {
+        return TOUCH_ACTION_MANIPULATION;
+    }
+
+    return TOUCH_ACTION_AUTO;
+}
+
+function getTouchActionProps() {
+    if (!NATIVE_TOUCH_ACTION) {
+        return false;
+    }
+    var touchMap = {};
+    var cssSupports = window.CSS && window.CSS.supports;
+    ['auto', 'manipulation', 'pan-y', 'pan-x', 'pan-x pan-y', 'none'].forEach(function(val) {
+
+        // If css.supports is not supported but there is native touch-action assume it supports
+        // all values. This is the case for IE 10 and 11.
+        touchMap[val] = cssSupports ? window.CSS.supports('touch-action', val) : true;
+    });
+    return touchMap;
+}
+
+/**
+ * Recognizer flow explained; *
+ * All recognizers have the initial state of POSSIBLE when a input session starts.
+ * The definition of a input session is from the first input until the last input, with all it's movement in it. *
+ * Example session for mouse-input: mousedown -> mousemove -> mouseup
+ *
+ * On each recognizing cycle (see Manager.recognize) the .recognize() method is executed
+ * which determines with state it should be.
+ *
+ * If the recognizer has the state FAILED, CANCELLED or RECOGNIZED (equals ENDED), it is reset to
+ * POSSIBLE to give it another change on the next cycle.
+ *
+ *               Possible
+ *                  |
+ *            +-----+---------------+
+ *            |                     |
+ *      +-----+-----+               |
+ *      |           |               |
+ *   Failed      Cancelled          |
+ *                          +-------+------+
+ *                          |              |
+ *                      Recognized       Began
+ *                                         |
+ *                                      Changed
+ *                                         |
+ *                                  Ended/Recognized
+ */
+var STATE_POSSIBLE = 1;
+var STATE_BEGAN = 2;
+var STATE_CHANGED = 4;
+var STATE_ENDED = 8;
+var STATE_RECOGNIZED = STATE_ENDED;
+var STATE_CANCELLED = 16;
+var STATE_FAILED = 32;
+
+/**
+ * Recognizer
+ * Every recognizer needs to extend from this class.
+ * @constructor
+ * @param {Object} options
+ */
+function Recognizer(options) {
+    this.options = assign({}, this.defaults, options || {});
+
+    this.id = uniqueId();
+
+    this.manager = null;
+
+    // default is enable true
+    this.options.enable = ifUndefined(this.options.enable, true);
+
+    this.state = STATE_POSSIBLE;
+
+    this.simultaneous = {};
+    this.requireFail = [];
+}
+
+Recognizer.prototype = {
+    /**
+     * @virtual
+     * @type {Object}
+     */
+    defaults: {},
+
+    /**
+     * set options
+     * @param {Object} options
+     * @return {Recognizer}
+     */
+    set: function(options) {
+        assign(this.options, options);
+
+        // also update the touchAction, in case something changed about the directions/enabled state
+        this.manager && this.manager.touchAction.update();
+        return this;
+    },
+
+    /**
+     * recognize simultaneous with an other recognizer.
+     * @param {Recognizer} otherRecognizer
+     * @returns {Recognizer} this
+     */
+    recognizeWith: function(otherRecognizer) {
+        if (invokeArrayArg(otherRecognizer, 'recognizeWith', this)) {
+            return this;
+        }
+
+        var simultaneous = this.simultaneous;
+        otherRecognizer = getRecognizerByNameIfManager(otherRecognizer, this);
+        if (!simultaneous[otherRecognizer.id]) {
+            simultaneous[otherRecognizer.id] = otherRecognizer;
+            otherRecognizer.recognizeWith(this);
+        }
+        return this;
+    },
+
+    /**
+     * drop the simultaneous link. it doesnt remove the link on the other recognizer.
+     * @param {Recognizer} otherRecognizer
+     * @returns {Recognizer} this
+     */
+    dropRecognizeWith: function(otherRecognizer) {
+        if (invokeArrayArg(otherRecognizer, 'dropRecognizeWith', this)) {
+            return this;
+        }
+
+        otherRecognizer = getRecognizerByNameIfManager(otherRecognizer, this);
+        delete this.simultaneous[otherRecognizer.id];
+        return this;
+    },
+
+    /**
+     * recognizer can only run when an other is failing
+     * @param {Recognizer} otherRecognizer
+     * @returns {Recognizer} this
+     */
+    requireFailure: function(otherRecognizer) {
+        if (invokeArrayArg(otherRecognizer, 'requireFailure', this)) {
+            return this;
+        }
+
+        var requireFail = this.requireFail;
+        otherRecognizer = getRecognizerByNameIfManager(otherRecognizer, this);
+        if (inArray(requireFail, otherRecognizer) === -1) {
+            requireFail.push(otherRecognizer);
+            otherRecognizer.requireFailure(this);
+        }
+        return this;
+    },
+
+    /**
+     * drop the requireFailure link. it does not remove the link on the other recognizer.
+     * @param {Recognizer} otherRecognizer
+     * @returns {Recognizer} this
+     */
+    dropRequireFailure: function(otherRecognizer) {
+        if (invokeArrayArg(otherRecognizer, 'dropRequireFailure', this)) {
+            return this;
+        }
+
+        otherRecognizer = getRecognizerByNameIfManager(otherRecognizer, this);
+        var index = inArray(this.requireFail, otherRecognizer);
+        if (index > -1) {
+            this.requireFail.splice(index, 1);
+        }
+        return this;
+    },
+
+    /**
+     * has require failures boolean
+     * @returns {boolean}
+     */
+    hasRequireFailures: function() {
+        return this.requireFail.length > 0;
+    },
+
+    /**
+     * if the recognizer can recognize simultaneous with an other recognizer
+     * @param {Recognizer} otherRecognizer
+     * @returns {Boolean}
+     */
+    canRecognizeWith: function(otherRecognizer) {
+        return !!this.simultaneous[otherRecognizer.id];
+    },
+
+    /**
+     * You should use `tryEmit` instead of `emit` directly to check
+     * that all the needed recognizers has failed before emitting.
+     * @param {Object} input
+     */
+    emit: function(input) {
+        var self = this;
+        var state = this.state;
+
+        function emit(event) {
+            self.manager.emit(event, input);
+        }
+
+        // 'panstart' and 'panmove'
+        if (state < STATE_ENDED) {
+            emit(self.options.event + stateStr(state));
+        }
+
+        emit(self.options.event); // simple 'eventName' events
+
+        if (input.additionalEvent) { // additional event(panleft, panright, pinchin, pinchout...)
+            emit(input.additionalEvent);
+        }
+
+        // panend and pancancel
+        if (state >= STATE_ENDED) {
+            emit(self.options.event + stateStr(state));
+        }
+    },
+
+    /**
+     * Check that all the require failure recognizers has failed,
+     * if true, it emits a gesture event,
+     * otherwise, setup the state to FAILED.
+     * @param {Object} input
+     */
+    tryEmit: function(input) {
+        if (this.canEmit()) {
+            return this.emit(input);
+        }
+        // it's failing anyway
+        this.state = STATE_FAILED;
+    },
+
+    /**
+     * can we emit?
+     * @returns {boolean}
+     */
+    canEmit: function() {
+        var i = 0;
+        while (i < this.requireFail.length) {
+            if (!(this.requireFail[i].state & (STATE_FAILED | STATE_POSSIBLE))) {
+                return false;
+            }
+            i++;
+        }
+        return true;
+    },
+
+    /**
+     * update the recognizer
+     * @param {Object} inputData
+     */
+    recognize: function(inputData) {
+        // make a new copy of the inputData
+        // so we can change the inputData without messing up the other recognizers
+        var inputDataClone = assign({}, inputData);
+
+        // is is enabled and allow recognizing?
+        if (!boolOrFn(this.options.enable, [this, inputDataClone])) {
+            this.reset();
+            this.state = STATE_FAILED;
+            return;
+        }
+
+        // reset when we've reached the end
+        if (this.state & (STATE_RECOGNIZED | STATE_CANCELLED | STATE_FAILED)) {
+            this.state = STATE_POSSIBLE;
+        }
+
+        this.state = this.process(inputDataClone);
+
+        // the recognizer has recognized a gesture
+        // so trigger an event
+        if (this.state & (STATE_BEGAN | STATE_CHANGED | STATE_ENDED | STATE_CANCELLED)) {
+            this.tryEmit(inputDataClone);
+        }
+    },
+
+    /**
+     * return the state of the recognizer
+     * the actual recognizing happens in this method
+     * @virtual
+     * @param {Object} inputData
+     * @returns {Const} STATE
+     */
+    process: function(inputData) { }, // jshint ignore:line
+
+    /**
+     * return the preferred touch-action
+     * @virtual
+     * @returns {Array}
+     */
+    getTouchAction: function() { },
+
+    /**
+     * called when the gesture isn't allowed to recognize
+     * like when another is being recognized or it is disabled
+     * @virtual
+     */
+    reset: function() { }
+};
+
+/**
+ * get a usable string, used as event postfix
+ * @param {Const} state
+ * @returns {String} state
+ */
+function stateStr(state) {
+    if (state & STATE_CANCELLED) {
+        return 'cancel';
+    } else if (state & STATE_ENDED) {
+        return 'end';
+    } else if (state & STATE_CHANGED) {
+        return 'move';
+    } else if (state & STATE_BEGAN) {
+        return 'start';
+    }
+    return '';
+}
+
+/**
+ * direction cons to string
+ * @param {Const} direction
+ * @returns {String}
+ */
+function directionStr(direction) {
+    if (direction == DIRECTION_DOWN) {
+        return 'down';
+    } else if (direction == DIRECTION_UP) {
+        return 'up';
+    } else if (direction == DIRECTION_LEFT) {
+        return 'left';
+    } else if (direction == DIRECTION_RIGHT) {
+        return 'right';
+    }
+    return '';
+}
+
+/**
+ * get a recognizer by name if it is bound to a manager
+ * @param {Recognizer|String} otherRecognizer
+ * @param {Recognizer} recognizer
+ * @returns {Recognizer}
+ */
+function getRecognizerByNameIfManager(otherRecognizer, recognizer) {
+    var manager = recognizer.manager;
+    if (manager) {
+        return manager.get(otherRecognizer);
+    }
+    return otherRecognizer;
+}
+
+/**
+ * This recognizer is just used as a base for the simple attribute recognizers.
+ * @constructor
+ * @extends Recognizer
+ */
+function AttrRecognizer() {
+    Recognizer.apply(this, arguments);
+}
+
+inherit(AttrRecognizer, Recognizer, {
+    /**
+     * @namespace
+     * @memberof AttrRecognizer
+     */
+    defaults: {
+        /**
+         * @type {Number}
+         * @default 1
+         */
+        pointers: 1
+    },
+
+    /**
+     * Used to check if it the recognizer receives valid input, like input.distance > 10.
+     * @memberof AttrRecognizer
+     * @param {Object} input
+     * @returns {Boolean} recognized
+     */
+    attrTest: function(input) {
+        var optionPointers = this.options.pointers;
+        return optionPointers === 0 || input.pointers.length === optionPointers;
+    },
+
+    /**
+     * Process the input and return the state for the recognizer
+     * @memberof AttrRecognizer
+     * @param {Object} input
+     * @returns {*} State
+     */
+    process: function(input) {
+        var state = this.state;
+        var eventType = input.eventType;
+
+        var isRecognized = state & (STATE_BEGAN | STATE_CHANGED);
+        var isValid = this.attrTest(input);
+
+        // on cancel input and we've recognized before, return STATE_CANCELLED
+        if (isRecognized && (eventType & INPUT_CANCEL || !isValid)) {
+            return state | STATE_CANCELLED;
+        } else if (isRecognized || isValid) {
+            if (eventType & INPUT_END) {
+                return state | STATE_ENDED;
+            } else if (!(state & STATE_BEGAN)) {
+                return STATE_BEGAN;
+            }
+            return state | STATE_CHANGED;
+        }
+        return STATE_FAILED;
+    }
+});
+
+/**
+ * Pan
+ * Recognized when the pointer is down and moved in the allowed direction.
+ * @constructor
+ * @extends AttrRecognizer
+ */
+function PanRecognizer() {
+    AttrRecognizer.apply(this, arguments);
+
+    this.pX = null;
+    this.pY = null;
+}
+
+inherit(PanRecognizer, AttrRecognizer, {
+    /**
+     * @namespace
+     * @memberof PanRecognizer
+     */
+    defaults: {
+        event: 'pan',
+        threshold: 10,
+        pointers: 1,
+        direction: DIRECTION_ALL
+    },
+
+    getTouchAction: function() {
+        var direction = this.options.direction;
+        var actions = [];
+        if (direction & DIRECTION_HORIZONTAL) {
+            actions.push(TOUCH_ACTION_PAN_Y);
+        }
+        if (direction & DIRECTION_VERTICAL) {
+            actions.push(TOUCH_ACTION_PAN_X);
+        }
+        return actions;
+    },
+
+    directionTest: function(input) {
+        var options = this.options;
+        var hasMoved = true;
+        var distance = input.distance;
+        var direction = input.direction;
+        var x = input.deltaX;
+        var y = input.deltaY;
+
+        // lock to axis?
+        if (!(direction & options.direction)) {
+            if (options.direction & DIRECTION_HORIZONTAL) {
+                direction = (x === 0) ? DIRECTION_NONE : (x < 0) ? DIRECTION_LEFT : DIRECTION_RIGHT;
+                hasMoved = x != this.pX;
+                distance = Math.abs(input.deltaX);
+            } else {
+                direction = (y === 0) ? DIRECTION_NONE : (y < 0) ? DIRECTION_UP : DIRECTION_DOWN;
+                hasMoved = y != this.pY;
+                distance = Math.abs(input.deltaY);
+            }
+        }
+        input.direction = direction;
+        return hasMoved && distance > options.threshold && direction & options.direction;
+    },
+
+    attrTest: function(input) {
+        return AttrRecognizer.prototype.attrTest.call(this, input) &&
+            (this.state & STATE_BEGAN || (!(this.state & STATE_BEGAN) && this.directionTest(input)));
+    },
+
+    emit: function(input) {
+
+        this.pX = input.deltaX;
+        this.pY = input.deltaY;
+
+        var direction = directionStr(input.direction);
+
+        if (direction) {
+            input.additionalEvent = this.options.event + direction;
+        }
+        this._super.emit.call(this, input);
+    }
+});
+
+/**
+ * Pinch
+ * Recognized when two or more pointers are moving toward (zoom-in) or away from each other (zoom-out).
+ * @constructor
+ * @extends AttrRecognizer
+ */
+function PinchRecognizer() {
+    AttrRecognizer.apply(this, arguments);
+}
+
+inherit(PinchRecognizer, AttrRecognizer, {
+    /**
+     * @namespace
+     * @memberof PinchRecognizer
+     */
+    defaults: {
+        event: 'pinch',
+        threshold: 0,
+        pointers: 2
+    },
+
+    getTouchAction: function() {
+        return [TOUCH_ACTION_NONE];
+    },
+
+    attrTest: function(input) {
+        return this._super.attrTest.call(this, input) &&
+            (Math.abs(input.scale - 1) > this.options.threshold || this.state & STATE_BEGAN);
+    },
+
+    emit: function(input) {
+        if (input.scale !== 1) {
+            var inOut = input.scale < 1 ? 'in' : 'out';
+            input.additionalEvent = this.options.event + inOut;
+        }
+        this._super.emit.call(this, input);
+    }
+});
+
+/**
+ * Press
+ * Recognized when the pointer is down for x ms without any movement.
+ * @constructor
+ * @extends Recognizer
+ */
+function PressRecognizer() {
+    Recognizer.apply(this, arguments);
+
+    this._timer = null;
+    this._input = null;
+}
+
+inherit(PressRecognizer, Recognizer, {
+    /**
+     * @namespace
+     * @memberof PressRecognizer
+     */
+    defaults: {
+        event: 'press',
+        pointers: 1,
+        time: 251, // minimal time of the pointer to be pressed
+        threshold: 9 // a minimal movement is ok, but keep it low
+    },
+
+    getTouchAction: function() {
+        return [TOUCH_ACTION_AUTO];
+    },
+
+    process: function(input) {
+        var options = this.options;
+        var validPointers = input.pointers.length === options.pointers;
+        var validMovement = input.distance < options.threshold;
+        var validTime = input.deltaTime > options.time;
+
+        this._input = input;
+
+        // we only allow little movement
+        // and we've reached an end event, so a tap is possible
+        if (!validMovement || !validPointers || (input.eventType & (INPUT_END | INPUT_CANCEL) && !validTime)) {
+            this.reset();
+        } else if (input.eventType & INPUT_START) {
+            this.reset();
+            this._timer = setTimeoutContext(function() {
+                this.state = STATE_RECOGNIZED;
+                this.tryEmit();
+            }, options.time, this);
+        } else if (input.eventType & INPUT_END) {
+            return STATE_RECOGNIZED;
+        }
+        return STATE_FAILED;
+    },
+
+    reset: function() {
+        clearTimeout(this._timer);
+    },
+
+    emit: function(input) {
+        if (this.state !== STATE_RECOGNIZED) {
+            return;
+        }
+
+        if (input && (input.eventType & INPUT_END)) {
+            this.manager.emit(this.options.event + 'up', input);
+        } else {
+            this._input.timeStamp = now();
+            this.manager.emit(this.options.event, this._input);
+        }
+    }
+});
+
+/**
+ * Rotate
+ * Recognized when two or more pointer are moving in a circular motion.
+ * @constructor
+ * @extends AttrRecognizer
+ */
+function RotateRecognizer() {
+    AttrRecognizer.apply(this, arguments);
+}
+
+inherit(RotateRecognizer, AttrRecognizer, {
+    /**
+     * @namespace
+     * @memberof RotateRecognizer
+     */
+    defaults: {
+        event: 'rotate',
+        threshold: 0,
+        pointers: 2
+    },
+
+    getTouchAction: function() {
+        return [TOUCH_ACTION_NONE];
+    },
+
+    attrTest: function(input) {
+        return this._super.attrTest.call(this, input) &&
+            (Math.abs(input.rotation) > this.options.threshold || this.state & STATE_BEGAN);
+    }
+});
+
+/**
+ * Swipe
+ * Recognized when the pointer is moving fast (velocity), with enough distance in the allowed direction.
+ * @constructor
+ * @extends AttrRecognizer
+ */
+function SwipeRecognizer() {
+    AttrRecognizer.apply(this, arguments);
+}
+
+inherit(SwipeRecognizer, AttrRecognizer, {
+    /**
+     * @namespace
+     * @memberof SwipeRecognizer
+     */
+    defaults: {
+        event: 'swipe',
+        threshold: 10,
+        velocity: 0.3,
+        direction: DIRECTION_HORIZONTAL | DIRECTION_VERTICAL,
+        pointers: 1
+    },
+
+    getTouchAction: function() {
+        return PanRecognizer.prototype.getTouchAction.call(this);
+    },
+
+    attrTest: function(input) {
+        var direction = this.options.direction;
+        var velocity;
+
+        if (direction & (DIRECTION_HORIZONTAL | DIRECTION_VERTICAL)) {
+            velocity = input.overallVelocity;
+        } else if (direction & DIRECTION_HORIZONTAL) {
+            velocity = input.overallVelocityX;
+        } else if (direction & DIRECTION_VERTICAL) {
+            velocity = input.overallVelocityY;
+        }
+
+        return this._super.attrTest.call(this, input) &&
+            direction & input.offsetDirection &&
+            input.distance > this.options.threshold &&
+            input.maxPointers == this.options.pointers &&
+            abs(velocity) > this.options.velocity && input.eventType & INPUT_END;
+    },
+
+    emit: function(input) {
+        var direction = directionStr(input.offsetDirection);
+        if (direction) {
+            this.manager.emit(this.options.event + direction, input);
+        }
+
+        this.manager.emit(this.options.event, input);
+    }
+});
+
+/**
+ * A tap is ecognized when the pointer is doing a small tap/click. Multiple taps are recognized if they occur
+ * between the given interval and position. The delay option can be used to recognize multi-taps without firing
+ * a single tap.
+ *
+ * The eventData from the emitted event contains the property `tapCount`, which contains the amount of
+ * multi-taps being recognized.
+ * @constructor
+ * @extends Recognizer
+ */
+function TapRecognizer() {
+    Recognizer.apply(this, arguments);
+
+    // previous time and center,
+    // used for tap counting
+    this.pTime = false;
+    this.pCenter = false;
+
+    this._timer = null;
+    this._input = null;
+    this.count = 0;
+}
+
+inherit(TapRecognizer, Recognizer, {
+    /**
+     * @namespace
+     * @memberof PinchRecognizer
+     */
+    defaults: {
+        event: 'tap',
+        pointers: 1,
+        taps: 1,
+        interval: 300, // max time between the multi-tap taps
+        time: 250, // max time of the pointer to be down (like finger on the screen)
+        threshold: 9, // a minimal movement is ok, but keep it low
+        posThreshold: 10 // a multi-tap can be a bit off the initial position
+    },
+
+    getTouchAction: function() {
+        return [TOUCH_ACTION_MANIPULATION];
+    },
+
+    process: function(input) {
+        var options = this.options;
+
+        var validPointers = input.pointers.length === options.pointers;
+        var validMovement = input.distance < options.threshold;
+        var validTouchTime = input.deltaTime < options.time;
+
+        this.reset();
+
+        if ((input.eventType & INPUT_START) && (this.count === 0)) {
+            return this.failTimeout();
+        }
+
+        // we only allow little movement
+        // and we've reached an end event, so a tap is possible
+        if (validMovement && validTouchTime && validPointers) {
+            if (input.eventType != INPUT_END) {
+                return this.failTimeout();
+            }
+
+            var validInterval = this.pTime ? (input.timeStamp - this.pTime < options.interval) : true;
+            var validMultiTap = !this.pCenter || getDistance(this.pCenter, input.center) < options.posThreshold;
+
+            this.pTime = input.timeStamp;
+            this.pCenter = input.center;
+
+            if (!validMultiTap || !validInterval) {
+                this.count = 1;
+            } else {
+                this.count += 1;
+            }
+
+            this._input = input;
+
+            // if tap count matches we have recognized it,
+            // else it has began recognizing...
+            var tapCount = this.count % options.taps;
+            if (tapCount === 0) {
+                // no failing requirements, immediately trigger the tap event
+                // or wait as long as the multitap interval to trigger
+                if (!this.hasRequireFailures()) {
+                    return STATE_RECOGNIZED;
+                } else {
+                    this._timer = setTimeoutContext(function() {
+                        this.state = STATE_RECOGNIZED;
+                        this.tryEmit();
+                    }, options.interval, this);
+                    return STATE_BEGAN;
+                }
+            }
+        }
+        return STATE_FAILED;
+    },
+
+    failTimeout: function() {
+        this._timer = setTimeoutContext(function() {
+            this.state = STATE_FAILED;
+        }, this.options.interval, this);
+        return STATE_FAILED;
+    },
+
+    reset: function() {
+        clearTimeout(this._timer);
+    },
+
+    emit: function() {
+        if (this.state == STATE_RECOGNIZED) {
+            this._input.tapCount = this.count;
+            this.manager.emit(this.options.event, this._input);
+        }
+    }
+});
+
+/**
+ * Simple way to create a manager with a default set of recognizers.
+ * @param {HTMLElement} element
+ * @param {Object} [options]
+ * @constructor
+ */
+function Hammer(element, options) {
+    options = options || {};
+    options.recognizers = ifUndefined(options.recognizers, Hammer.defaults.preset);
+    return new Manager(element, options);
+}
+
+/**
+ * @const {string}
+ */
+Hammer.VERSION = '2.0.7';
+
+/**
+ * default settings
+ * @namespace
+ */
+Hammer.defaults = {
+    /**
+     * set if DOM events are being triggered.
+     * But this is slower and unused by simple implementations, so disabled by default.
+     * @type {Boolean}
+     * @default false
+     */
+    domEvents: false,
+
+    /**
+     * The value for the touchAction property/fallback.
+     * When set to `compute` it will magically set the correct value based on the added recognizers.
+     * @type {String}
+     * @default compute
+     */
+    touchAction: TOUCH_ACTION_COMPUTE,
+
+    /**
+     * @type {Boolean}
+     * @default true
+     */
+    enable: true,
+
+    /**
+     * EXPERIMENTAL FEATURE -- can be removed/changed
+     * Change the parent input target element.
+     * If Null, then it is being set the to main element.
+     * @type {Null|EventTarget}
+     * @default null
+     */
+    inputTarget: null,
+
+    /**
+     * force an input class
+     * @type {Null|Function}
+     * @default null
+     */
+    inputClass: null,
+
+    /**
+     * Default recognizer setup when calling `Hammer()`
+     * When creating a new Manager these will be skipped.
+     * @type {Array}
+     */
+    preset: [
+        // RecognizerClass, options, [recognizeWith, ...], [requireFailure, ...]
+        [RotateRecognizer, {enable: false}],
+        [PinchRecognizer, {enable: false}, ['rotate']],
+        [SwipeRecognizer, {direction: DIRECTION_HORIZONTAL}],
+        [PanRecognizer, {direction: DIRECTION_HORIZONTAL}, ['swipe']],
+        [TapRecognizer],
+        [TapRecognizer, {event: 'doubletap', taps: 2}, ['tap']],
+        [PressRecognizer]
+    ],
+
+    /**
+     * Some CSS properties can be used to improve the working of Hammer.
+     * Add them to this method and they will be set when creating a new Manager.
+     * @namespace
+     */
+    cssProps: {
+        /**
+         * Disables text selection to improve the dragging gesture. Mainly for desktop browsers.
+         * @type {String}
+         * @default 'none'
+         */
+        userSelect: 'none',
+
+        /**
+         * Disable the Windows Phone grippers when pressing an element.
+         * @type {String}
+         * @default 'none'
+         */
+        touchSelect: 'none',
+
+        /**
+         * Disables the default callout shown when you touch and hold a touch target.
+         * On iOS, when you touch and hold a touch target such as a link, Safari displays
+         * a callout containing information about the link. This property allows you to disable that callout.
+         * @type {String}
+         * @default 'none'
+         */
+        touchCallout: 'none',
+
+        /**
+         * Specifies whether zooming is enabled. Used by IE10>
+         * @type {String}
+         * @default 'none'
+         */
+        contentZooming: 'none',
+
+        /**
+         * Specifies that an entire element should be draggable instead of its contents. Mainly for desktop browsers.
+         * @type {String}
+         * @default 'none'
+         */
+        userDrag: 'none',
+
+        /**
+         * Overrides the highlight color shown when the user taps a link or a JavaScript
+         * clickable element in iOS. This property obeys the alpha value, if specified.
+         * @type {String}
+         * @default 'rgba(0,0,0,0)'
+         */
+        tapHighlightColor: 'rgba(0,0,0,0)'
+    }
+};
+
+var STOP = 1;
+var FORCED_STOP = 2;
+
+/**
+ * Manager
+ * @param {HTMLElement} element
+ * @param {Object} [options]
+ * @constructor
+ */
+function Manager(element, options) {
+    this.options = assign({}, Hammer.defaults, options || {});
+
+    this.options.inputTarget = this.options.inputTarget || element;
+
+    this.handlers = {};
+    this.session = {};
+    this.recognizers = [];
+    this.oldCssProps = {};
+
+    this.element = element;
+    this.input = createInputInstance(this);
+    this.touchAction = new TouchAction(this, this.options.touchAction);
+
+    toggleCssProps(this, true);
+
+    each(this.options.recognizers, function(item) {
+        var recognizer = this.add(new (item[0])(item[1]));
+        item[2] && recognizer.recognizeWith(item[2]);
+        item[3] && recognizer.requireFailure(item[3]);
+    }, this);
+}
+
+Manager.prototype = {
+    /**
+     * set options
+     * @param {Object} options
+     * @returns {Manager}
+     */
+    set: function(options) {
+        assign(this.options, options);
+
+        // Options that need a little more setup
+        if (options.touchAction) {
+            this.touchAction.update();
+        }
+        if (options.inputTarget) {
+            // Clean up existing event listeners and reinitialize
+            this.input.destroy();
+            this.input.target = options.inputTarget;
+            this.input.init();
+        }
+        return this;
+    },
+
+    /**
+     * stop recognizing for this session.
+     * This session will be discarded, when a new [input]start event is fired.
+     * When forced, the recognizer cycle is stopped immediately.
+     * @param {Boolean} [force]
+     */
+    stop: function(force) {
+        this.session.stopped = force ? FORCED_STOP : STOP;
+    },
+
+    /**
+     * run the recognizers!
+     * called by the inputHandler function on every movement of the pointers (touches)
+     * it walks through all the recognizers and tries to detect the gesture that is being made
+     * @param {Object} inputData
+     */
+    recognize: function(inputData) {
+        var session = this.session;
+        if (session.stopped) {
+            return;
+        }
+
+        // run the touch-action polyfill
+        this.touchAction.preventDefaults(inputData);
+
+        var recognizer;
+        var recognizers = this.recognizers;
+
+        // this holds the recognizer that is being recognized.
+        // so the recognizer's state needs to be BEGAN, CHANGED, ENDED or RECOGNIZED
+        // if no recognizer is detecting a thing, it is set to `null`
+        var curRecognizer = session.curRecognizer;
+
+        // reset when the last recognizer is recognized
+        // or when we're in a new session
+        if (!curRecognizer || (curRecognizer && curRecognizer.state & STATE_RECOGNIZED)) {
+            curRecognizer = session.curRecognizer = null;
+        }
+
+        var i = 0;
+        while (i < recognizers.length) {
+            recognizer = recognizers[i];
+
+            // find out if we are allowed try to recognize the input for this one.
+            // 1.   allow if the session is NOT forced stopped (see the .stop() method)
+            // 2.   allow if we still haven't recognized a gesture in this session, or the this recognizer is the one
+            //      that is being recognized.
+            // 3.   allow if the recognizer is allowed to run simultaneous with the current recognized recognizer.
+            //      this can be setup with the `recognizeWith()` method on the recognizer.
+            if (session.stopped !== FORCED_STOP && ( // 1
+                    !curRecognizer || recognizer == curRecognizer || // 2
+                    recognizer.canRecognizeWith(curRecognizer))) { // 3
+                recognizer.recognize(inputData);
+            } else {
+                recognizer.reset();
+            }
+
+            // if the recognizer has been recognizing the input as a valid gesture, we want to store this one as the
+            // current active recognizer. but only if we don't already have an active recognizer
+            if (!curRecognizer && recognizer.state & (STATE_BEGAN | STATE_CHANGED | STATE_ENDED)) {
+                curRecognizer = session.curRecognizer = recognizer;
+            }
+            i++;
+        }
+    },
+
+    /**
+     * get a recognizer by its event name.
+     * @param {Recognizer|String} recognizer
+     * @returns {Recognizer|Null}
+     */
+    get: function(recognizer) {
+        if (recognizer instanceof Recognizer) {
+            return recognizer;
+        }
+
+        var recognizers = this.recognizers;
+        for (var i = 0; i < recognizers.length; i++) {
+            if (recognizers[i].options.event == recognizer) {
+                return recognizers[i];
+            }
+        }
+        return null;
+    },
+
+    /**
+     * add a recognizer to the manager
+     * existing recognizers with the same event name will be removed
+     * @param {Recognizer} recognizer
+     * @returns {Recognizer|Manager}
+     */
+    add: function(recognizer) {
+        if (invokeArrayArg(recognizer, 'add', this)) {
+            return this;
+        }
+
+        // remove existing
+        var existing = this.get(recognizer.options.event);
+        if (existing) {
+            this.remove(existing);
+        }
+
+        this.recognizers.push(recognizer);
+        recognizer.manager = this;
+
+        this.touchAction.update();
+        return recognizer;
+    },
+
+    /**
+     * remove a recognizer by name or instance
+     * @param {Recognizer|String} recognizer
+     * @returns {Manager}
+     */
+    remove: function(recognizer) {
+        if (invokeArrayArg(recognizer, 'remove', this)) {
+            return this;
+        }
+
+        recognizer = this.get(recognizer);
+
+        // let's make sure this recognizer exists
+        if (recognizer) {
+            var recognizers = this.recognizers;
+            var index = inArray(recognizers, recognizer);
+
+            if (index !== -1) {
+                recognizers.splice(index, 1);
+                this.touchAction.update();
+            }
+        }
+
+        return this;
+    },
+
+    /**
+     * bind event
+     * @param {String} events
+     * @param {Function} handler
+     * @returns {EventEmitter} this
+     */
+    on: function(events, handler) {
+        if (events === undefined) {
+            return;
+        }
+        if (handler === undefined) {
+            return;
+        }
+
+        var handlers = this.handlers;
+        each(splitStr(events), function(event) {
+            handlers[event] = handlers[event] || [];
+            handlers[event].push(handler);
+        });
+        return this;
+    },
+
+    /**
+     * unbind event, leave emit blank to remove all handlers
+     * @param {String} events
+     * @param {Function} [handler]
+     * @returns {EventEmitter} this
+     */
+    off: function(events, handler) {
+        if (events === undefined) {
+            return;
+        }
+
+        var handlers = this.handlers;
+        each(splitStr(events), function(event) {
+            if (!handler) {
+                delete handlers[event];
+            } else {
+                handlers[event] && handlers[event].splice(inArray(handlers[event], handler), 1);
+            }
+        });
+        return this;
+    },
+
+    /**
+     * emit event to the listeners
+     * @param {String} event
+     * @param {Object} data
+     */
+    emit: function(event, data) {
+        // we also want to trigger dom events
+        if (this.options.domEvents) {
+            triggerDomEvent(event, data);
+        }
+
+        // no handlers, so skip it all
+        var handlers = this.handlers[event] && this.handlers[event].slice();
+        if (!handlers || !handlers.length) {
+            return;
+        }
+
+        data.type = event;
+        data.preventDefault = function() {
+            data.srcEvent.preventDefault();
+        };
+
+        var i = 0;
+        while (i < handlers.length) {
+            handlers[i](data);
+            i++;
+        }
+    },
+
+    /**
+     * destroy the manager and unbinds all events
+     * it doesn't unbind dom events, that is the user own responsibility
+     */
+    destroy: function() {
+        this.element && toggleCssProps(this, false);
+
+        this.handlers = {};
+        this.session = {};
+        this.input.destroy();
+        this.element = null;
+    }
+};
+
+/**
+ * add/remove the css properties as defined in manager.options.cssProps
+ * @param {Manager} manager
+ * @param {Boolean} add
+ */
+function toggleCssProps(manager, add) {
+    var element = manager.element;
+    if (!element.style) {
+        return;
+    }
+    var prop;
+    each(manager.options.cssProps, function(value, name) {
+        prop = prefixed(element.style, name);
+        if (add) {
+            manager.oldCssProps[prop] = element.style[prop];
+            element.style[prop] = value;
+        } else {
+            element.style[prop] = manager.oldCssProps[prop] || '';
+        }
+    });
+    if (!add) {
+        manager.oldCssProps = {};
+    }
+}
+
+/**
+ * trigger dom event
+ * @param {String} event
+ * @param {Object} data
+ */
+function triggerDomEvent(event, data) {
+    var gestureEvent = document.createEvent('Event');
+    gestureEvent.initEvent(event, true, true);
+    gestureEvent.gesture = data;
+    data.target.dispatchEvent(gestureEvent);
+}
+
+assign(Hammer, {
+    INPUT_START: INPUT_START,
+    INPUT_MOVE: INPUT_MOVE,
+    INPUT_END: INPUT_END,
+    INPUT_CANCEL: INPUT_CANCEL,
+
+    STATE_POSSIBLE: STATE_POSSIBLE,
+    STATE_BEGAN: STATE_BEGAN,
+    STATE_CHANGED: STATE_CHANGED,
+    STATE_ENDED: STATE_ENDED,
+    STATE_RECOGNIZED: STATE_RECOGNIZED,
+    STATE_CANCELLED: STATE_CANCELLED,
+    STATE_FAILED: STATE_FAILED,
+
+    DIRECTION_NONE: DIRECTION_NONE,
+    DIRECTION_LEFT: DIRECTION_LEFT,
+    DIRECTION_RIGHT: DIRECTION_RIGHT,
+    DIRECTION_UP: DIRECTION_UP,
+    DIRECTION_DOWN: DIRECTION_DOWN,
+    DIRECTION_HORIZONTAL: DIRECTION_HORIZONTAL,
+    DIRECTION_VERTICAL: DIRECTION_VERTICAL,
+    DIRECTION_ALL: DIRECTION_ALL,
+
+    Manager: Manager,
+    Input: Input,
+    TouchAction: TouchAction,
+
+    TouchInput: TouchInput,
+    MouseInput: MouseInput,
+    PointerEventInput: PointerEventInput,
+    TouchMouseInput: TouchMouseInput,
+    SingleTouchInput: SingleTouchInput,
+
+    Recognizer: Recognizer,
+    AttrRecognizer: AttrRecognizer,
+    Tap: TapRecognizer,
+    Pan: PanRecognizer,
+    Swipe: SwipeRecognizer,
+    Pinch: PinchRecognizer,
+    Rotate: RotateRecognizer,
+    Press: PressRecognizer,
+
+    on: addEventListeners,
+    off: removeEventListeners,
+    each: each,
+    merge: merge,
+    extend: extend,
+    assign: assign,
+    inherit: inherit,
+    bindFn: bindFn,
+    prefixed: prefixed
+});
+
+// this prevents errors when Hammer is loaded in the presence of an AMD
+//  style loader but by script tag, not by the loader.
+var freeGlobal = (typeof window !== 'undefined' ? window : (typeof self !== 'undefined' ? self : {})); // jshint ignore:line
+freeGlobal.Hammer = Hammer;
+
+if (typeof define === 'function' && define.amd) {
+    define(function() {
+        return Hammer;
+    });
+} else if (typeof module != 'undefined' && module.exports) {
+    module.exports = Hammer;
+} else {
+    window[exportName] = Hammer;
+}
+
+})(window, document, 'Hammer');
+
+});
+return ___scope___.entry = "hammer.js";
+});
 FuseBox.pkg("howler", {}, function(___scope___){
 ___scope___.file("dist/howler.js", function(exports, require, module, __filename, __dirname){
 
 /*!
- *  howler.js v2.0.9
+ *  howler.js v2.1.3
  *  howlerjs.com
  *
- *  (c) 2013-2018, James Simpson of GoldFire Studios
+ *  (c) 2013-2019, James Simpson of GoldFire Studios
  *  goldfirestudios.com
  *
  *  MIT License
@@ -36752,6 +40394,10 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       // Create a global ID counter.
       self._counter = 1000;
 
+      // Pool of unlocked HTML5 Audio objects.
+      self._html5AudioPool = [];
+      self.html5PoolSize = 10;
+
       // Internal properties.
       self._codecs = {};
       self._howls = [];
@@ -36767,8 +40413,8 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       self.autoSuspend = true;
       self.ctx = null;
 
-      // Set to false to disable the auto iOS enabler.
-      self.mobileAutoEnable = true;
+      // Set to false to disable the auto audio unlocker.
+      self.autoUnlock = true;
 
       // Setup the various state values for global tracking.
       self._setup();
@@ -36903,7 +40549,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       var self = this || Howler;
 
       // Keeps track of the suspend/resume state of the AudioContext.
-      self.state = self.ctx ? self.ctx.state || 'running' : 'running';
+      self.state = self.ctx ? self.ctx.state || 'suspended' : 'suspended';
 
       // Automatically begin the 30-second suspend process
       self._autoSuspend();
@@ -36989,22 +40635,21 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
     },
 
     /**
-     * Mobile browsers will only allow audio to be played after a user interaction.
+     * Some browsers/devices will only allow audio to be played after a user interaction.
      * Attempt to automatically unlock audio on the first user interaction.
      * Concept from: http://paulbakaus.com/tutorials/html5/web-audio-on-ios/
      * @return {Howler}
      */
-    _enableMobileAudio: function() {
+    _unlockAudio: function() {
       var self = this || Howler;
 
-      // Only run this on mobile devices if audio isn't already eanbled.
-      var isMobile = /iPhone|iPad|iPod|Android|BlackBerry|BB10|Silk|Mobi/i.test(self._navigator && self._navigator.userAgent);
-      var isTouch = !!(('ontouchend' in window) || (self._navigator && self._navigator.maxTouchPoints > 0) || (self._navigator && self._navigator.msMaxTouchPoints > 0));
-      if (self._mobileEnabled || !self.ctx || (!isMobile && !isTouch)) {
+      // Only run this if Web Audio is supported and it hasn't already been unlocked.
+      if (self._audioUnlocked || !self.ctx) {
         return;
       }
 
-      self._mobileEnabled = false;
+      self._audioUnlocked = false;
+      self.autoUnlock = false;
 
       // Some mobile devices/platforms have distortion issues when opening/closing tabs and/or web views.
       // Bugs in the browser (especially Mobile Safari) can cause the sampleRate to change from 44100 to 48000.
@@ -37021,9 +40666,48 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       // Call this method on touch start to create and play a buffer,
       // then check if the audio actually played to determine if
       // audio has now been unlocked on iOS, Android, etc.
-      var unlock = function() {
+      var unlock = function(e) {
+        // Create a pool of unlocked HTML5 Audio objects that can
+        // be used for playing sounds without user interaction. HTML5
+        // Audio objects must be individually unlocked, as opposed
+        // to the WebAudio API which only needs a single activation.
+        // This must occur before WebAudio setup or the source.onended
+        // event will not fire.
+        for (var i=0; i<self.html5PoolSize; i++) {
+          try {
+            var audioNode = new Audio();
+
+            // Mark this Audio object as unlocked to ensure it can get returned
+            // to the unlocked pool when released.
+            audioNode._unlocked = true;
+
+            // Add the audio node to the pool.
+            self._releaseHtml5Audio(audioNode);
+          } catch (e) {
+            self.noAudio = true;
+          }
+        }
+
+        // Loop through any assigned audio nodes and unlock them.
+        for (var i=0; i<self._howls.length; i++) {
+          if (!self._howls[i]._webAudio) {
+            // Get all of the sounds in this Howl group.
+            var ids = self._howls[i]._getSoundIds();
+
+            // Loop through all sounds and unlock the audio nodes.
+            for (var j=0; j<ids.length; j++) {
+              var sound = self._howls[i]._soundById(ids[j]);
+
+              if (sound && sound._node && !sound._node._unlocked) {
+                sound._node._unlocked = true;
+                sound._node.load();
+              }
+            }
+          }
+        }
+
         // Fix Android can not play in suspend state.
-        Howler._autoResume();
+        self._autoResume();
 
         // Create an empty buffer.
         var source = self.ctx.createBufferSource();
@@ -37047,18 +40731,63 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
           source.disconnect(0);
 
           // Update the unlocked state and prevent this check from happening again.
-          self._mobileEnabled = true;
-          self.mobileAutoEnable = false;
+          self._audioUnlocked = true;
 
           // Remove the touch start listener.
           document.removeEventListener('touchstart', unlock, true);
           document.removeEventListener('touchend', unlock, true);
+          document.removeEventListener('click', unlock, true);
+
+          // Let all sounds know that audio has been unlocked.
+          for (var i=0; i<self._howls.length; i++) {
+            self._howls[i]._emit('unlock');
+          }
         };
       };
 
       // Setup a touch start listener to attempt an unlock in.
       document.addEventListener('touchstart', unlock, true);
       document.addEventListener('touchend', unlock, true);
+      document.addEventListener('click', unlock, true);
+
+      return self;
+    },
+
+    /**
+     * Get an unlocked HTML5 Audio object from the pool. If none are left,
+     * return a new Audio object and throw a warning.
+     * @return {Audio} HTML5 Audio object.
+     */
+    _obtainHtml5Audio: function() {
+      var self = this || Howler;
+
+      // Return the next object from the pool if one exists.
+      if (self._html5AudioPool.length) {
+        return self._html5AudioPool.pop();
+      }
+
+      //.Check if the audio is locked and throw a warning.
+      var testPlay = new Audio().play();
+      if (testPlay && typeof Promise !== 'undefined' && (testPlay instanceof Promise || typeof testPlay.then === 'function')) {
+        testPlay.catch(function() {
+          console.warn('HTML5 Audio pool exhausted, returning potentially locked audio object.');
+        });
+      }
+
+      return new Audio();
+    },
+
+    /**
+     * Return an activated HTML5 Audio object to the pool.
+     * @return {Howler}
+     */
+    _releaseHtml5Audio: function(audio) {
+      var self = this || Howler;
+
+      // Don't add audio to the pool if we don't know if it has been unlocked.
+      if (audio._unlocked) {
+        self._html5AudioPool.push(audio);
+      }
 
       return self;
     },
@@ -37217,14 +40946,15 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       self._onvolume = o.onvolume ? [{fn: o.onvolume}] : [];
       self._onrate = o.onrate ? [{fn: o.onrate}] : [];
       self._onseek = o.onseek ? [{fn: o.onseek}] : [];
+      self._onunlock = o.onunlock ? [{fn: o.onunlock}] : [];
       self._onresume = [];
 
       // Web Audio or HTML5 Audio?
       self._webAudio = Howler.usingWebAudio && !self._html5;
 
-      // Automatically try to enable audio on iOS.
-      if (typeof Howler.ctx !== 'undefined' && Howler.ctx && Howler.mobileAutoEnable) {
-        Howler._enableMobileAudio();
+      // Automatically try to enable audio.
+      if (typeof Howler.ctx !== 'undefined' && Howler.ctx && Howler.autoUnlock) {
+        Howler._unlockAudio();
       }
 
       // Keep track of this Howl group in the global controller.
@@ -37352,20 +41082,22 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
         // Use the default sound sprite (plays the full audio length).
         sprite = '__default';
 
-        // Check if there is a single paused sound that isn't ended.
-        // If there is, play that sound. If not, continue as usual.
-        var num = 0;
-        for (var i=0; i<self._sounds.length; i++) {
-          if (self._sounds[i]._paused && !self._sounds[i]._ended) {
-            num++;
-            id = self._sounds[i]._id;
+        // Check if there is a single paused sound that isn't ended. 
+        // If there is, play that sound. If not, continue as usual.  
+        if (!self._playLock) {
+          var num = 0;
+          for (var i=0; i<self._sounds.length; i++) {
+            if (self._sounds[i]._paused && !self._sounds[i]._ended) {
+              num++;
+              id = self._sounds[i]._id;
+            }
           }
-        }
 
-        if (num === 1) {
-          sprite = null;
-        } else {
-          id = null;
+          if (num === 1) {
+            sprite = null;
+          } else {
+            id = null;
+          }
         }
       }
 
@@ -37389,7 +41121,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
         // Set the sprite value on this sound.
         sound._sprite = sprite;
 
-        // Makr this sounded as not ended in case another sound is played before this one loads.
+        // Mark this sound as not ended in case another sound is played before this one loads.
         sound._ended = false;
 
         // Add the sound to the queue to be played on load.
@@ -37423,21 +41155,36 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       var seek = Math.max(0, sound._seek > 0 ? sound._seek : self._sprite[sprite][0] / 1000);
       var duration = Math.max(0, ((self._sprite[sprite][0] + self._sprite[sprite][1]) / 1000) - seek);
       var timeout = (duration * 1000) / Math.abs(sound._rate);
-
-      // Update the parameters of the sound
-      sound._paused = false;
-      sound._ended = false;
+      var start = self._sprite[sprite][0] / 1000;
+      var stop = (self._sprite[sprite][0] + self._sprite[sprite][1]) / 1000;
       sound._sprite = sprite;
-      sound._seek = seek;
-      sound._start = self._sprite[sprite][0] / 1000;
-      sound._stop = (self._sprite[sprite][0] + self._sprite[sprite][1]) / 1000;
-      sound._loop = !!(sound._loop || self._sprite[sprite][2]);
+
+      // Mark the sound as ended instantly so that this async playback
+      // doesn't get grabbed by another call to play while this one waits to start.
+      sound._ended = false;
+
+      // Update the parameters of the sound.
+      var setParams = function() {
+        sound._paused = false;
+        sound._seek = seek;
+        sound._start = start;
+        sound._stop = stop;
+        sound._loop = !!(sound._loop || self._sprite[sprite][2]);
+      };
+
+      // End the sound instantly if seek is at the end.
+      if (seek >= stop) {
+        self._ended(sound);
+        return;
+      }
 
       // Begin the actual playback.
       var node = sound._node;
       if (self._webAudio) {
         // Fire this when the sound is ready to play to begin Web Audio playback.
         var playWebAudio = function() {
+          self._playLock = false;
+          setParams();
           self._refreshBuffer(sound);
 
           // Setup the playback params.
@@ -37460,6 +41207,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
           if (!internal) {
             setTimeout(function() {
               self._emit('play', sound._id);
+              self._loadQueue();
             }, 0);
           }
         };
@@ -37467,6 +41215,9 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
         if (Howler.state === 'running') {
           playWebAudio();
         } else {
+          self._playLock = true;
+
+          // Wait for the audio context to resume before playing.
           self.once('resume', playWebAudio);
 
           // Cancel the end timer.
@@ -37480,36 +41231,56 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
           node.volume = sound._volume * Howler.volume();
           node.playbackRate = sound._rate;
 
-          // Mobile browsers will throw an error if this is called without user interaction.
+          // Some browsers will throw an error if this is called without user interaction.
           try {
             var play = node.play();
 
             // Support older browsers that don't support promises, and thus don't have this issue.
-            if (typeof Promise !== 'undefined' && play instanceof Promise) {
+            if (play && typeof Promise !== 'undefined' && (play instanceof Promise || typeof play.then === 'function')) {
               // Implements a lock to prevent DOMException: The play() request was interrupted by a call to pause().
               self._playLock = true;
 
+              // Set param values immediately.
+              setParams();
+
               // Releases the lock and executes queued actions.
-              var runLoadQueue = function() {
-                self._playLock = false;
-                if (!internal) {
-                  self._emit('play', sound._id);
-                }
-              };
-              play.then(runLoadQueue, runLoadQueue);
+              play
+                .then(function() {
+                  self._playLock = false;
+                  node._unlocked = true;
+                  if (!internal) {
+                    self._emit('play', sound._id);
+                    self._loadQueue();
+                  }
+                })
+                .catch(function() {
+                  self._playLock = false;
+                  self._emit('playerror', sound._id, 'Playback was unable to start. This is most commonly an issue ' +
+                    'on mobile devices and Chrome where playback was not within a user interaction.');
+
+                  // Reset the ended and paused values.
+                  sound._ended = true;
+                  sound._paused = true;
+                });
             } else if (!internal) {
+              self._playLock = false;
+              setParams();
               self._emit('play', sound._id);
+              self._loadQueue();
             }
+
+            // Setting rate before playing won't work in IE, so we set it again here.
+            node.playbackRate = sound._rate;
 
             // If the node is still paused, then we can assume there was a playback issue.
             if (node.paused) {
               self._emit('playerror', sound._id, 'Playback was unable to start. This is most commonly an issue ' +
-                'on mobile devices where playback was not within a user interaction.');
+                'on mobile devices and Chrome where playback was not within a user interaction.');
               return;
             }
 
             // Setup the end timer on sprites or listen for the ended event.
-            if (sprite !== '__default') {
+            if (sprite !== '__default' || sound._loop) {
               self._endTimers[sound._id] = setTimeout(self._ended.bind(self, sound), timeout);
             } else {
               self._endTimers[sound._id] = function() {
@@ -37526,11 +41297,19 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
           }
         };
 
+        // If this is streaming audio, make sure the src is set and load again.
+        if (node.src === 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA') {
+          node.src = self._src;
+          node.load();
+        }
+
         // Play immediately if ready, or wait for the 'canplaythrough'e vent.
         var loadedNoReadyState = (window && window.ejecta) || (!node.readyState && Howler._navigator.isCocoonJS);
         if (node.readyState >= 3 || loadedNoReadyState) {
           playHtml5();
         } else {
+          self._playLock = true;
+
           var listener = function() {
             // Begin playback.
             playHtml5();
@@ -37627,7 +41406,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       var self = this;
 
       // If the sound hasn't loaded, add it to the load queue to stop when capable.
-      if (self._state !== 'loaded') {
+      if (self._state !== 'loaded' || self._playLock) {
         self._queue.push({
           event: 'stop',
           action: function() {
@@ -37674,6 +41453,11 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
             } else if (!isNaN(sound._node.duration) || sound._node.duration === Infinity) {
               sound._node.currentTime = sound._start || 0;
               sound._node.pause();
+
+              // If this is a live stream, stop download once the audio is stopped.
+              if (sound._node.duration === Infinity) {
+                self._clearSound(sound._node);
+              }
             }
           }
 
@@ -37696,7 +41480,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       var self = this;
 
       // If the sound hasn't loaded, add it to the load queue to mute when capable.
-      if (self._state !== 'loaded') {
+      if (self._state !== 'loaded'|| self._playLock) {
         self._queue.push({
           event: 'mute',
           action: function() {
@@ -37779,7 +41563,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       var sound;
       if (typeof vol !== 'undefined' && vol >= 0 && vol <= 1) {
         // If the sound hasn't loaded, add it to the load queue to change volume when capable.
-        if (self._state !== 'loaded') {
+        if (self._state !== 'loaded'|| self._playLock) {
           self._queue.push({
             event: 'volume',
             action: function() {
@@ -37827,7 +41611,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
     },
 
     /**
-     * Fade a currently playing sound between two volumes (if no id is passsed, all sounds will fade).
+     * Fade a currently playing sound between two volumes (if no id is passed, all sounds will fade).
      * @param  {Number} from The value to fade from (0.0 to 1.0).
      * @param  {Number} to   The volume to fade to (0.0 to 1.0).
      * @param  {Number} len  Time in milliseconds to fade.
@@ -37838,7 +41622,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       var self = this;
 
       // If the sound hasn't loaded, add it to the load queue to fade when capable.
-      if (self._state !== 'loaded') {
+      if (self._state !== 'loaded' || self._playLock) {
         self._queue.push({
           event: 'fade',
           action: function() {
@@ -37848,6 +41632,11 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
         return self;
       }
+
+      // Make sure the to/from/len values are numbers.
+      from = parseFloat(from);
+      to = parseFloat(to);
+      len = parseFloat(len);
 
       // Set the volume to the start position.
       self.volume(from, id);
@@ -38049,7 +41838,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       var sound;
       if (typeof rate === 'number') {
         // If the sound hasn't loaded, add it to the load queue to change playback rate when capable.
-        if (self._state !== 'loaded') {
+        if (self._state !== 'loaded' || self._playLock) {
           self._queue.push({
             event: 'rate',
             action: function() {
@@ -38074,8 +41863,10 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
           if (sound) {
             // Keep track of our position when the rate changed and update the playback
             // start position so we can properly adjust the seek position for time elapsed.
-            sound._rateSeek = self.seek(id[i]);
-            sound._playStart = self._webAudio ? Howler.ctx.currentTime : sound._playStart;
+            if (self.playing(id[i])) {
+              sound._rateSeek = self.seek(id[i]);
+              sound._playStart = self._webAudio ? Howler.ctx.currentTime : sound._playStart;
+            }
             sound._rate = rate;
 
             // Change the playback rate.
@@ -38145,7 +41936,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       }
 
       // If the sound hasn't loaded, add it to the load queue to seek when capable.
-      if (self._state !== 'loaded') {
+      if (self._state !== 'loaded' || self._playLock) {
         self._queue.push({
           event: 'seek',
           action: function() {
@@ -38172,28 +41963,33 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
           sound._ended = false;
           self._clearTimer(id);
 
-          // Restart the playback if the sound was playing.
-          if (playing) {
-            self.play(id, true);
-          }
-
           // Update the seek position for HTML5 Audio.
-          if (!self._webAudio && sound._node) {
+          if (!self._webAudio && sound._node && !isNaN(sound._node.duration)) {
             sound._node.currentTime = seek;
           }
+
+          // Seek and emit when ready.
+          var seekAndEmit = function() {
+            self._emit('seek', id);
+
+            // Restart the playback if the sound was playing.
+            if (playing) {
+              self.play(id, true);
+            }
+          };
 
           // Wait for the play lock to be unset before emitting (HTML5 Audio).
           if (playing && !self._webAudio) {
             var emitSeek = function() {
               if (!self._playLock) {
-                self._emit('seek', id);
+                seekAndEmit();
               } else {
                 setTimeout(emitSeek, 0);
               }
             };
             setTimeout(emitSeek, 0);
           } else {
-            self._emit('seek', id);
+            seekAndEmit();
           }
         } else {
           if (self._webAudio) {
@@ -38277,14 +42073,14 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
         // Remove the source or disconnect.
         if (!self._webAudio) {
           // Set the source to 0-second silence to stop any downloading (except in IE).
-          var checkIE = /MSIE |Trident\//.test(Howler._navigator && Howler._navigator.userAgent);
-          if (!checkIE) {
-            sounds[i]._node.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-          }
+          self._clearSound(sounds[i]._node);
 
           // Remove any event listeners.
           sounds[i]._node.removeEventListener('error', sounds[i]._errorFn, false);
           sounds[i]._node.removeEventListener(Howler._canPlayEvent, sounds[i]._loadFn, false);
+
+          // Release the Audio object back to the pool.
+          Howler._releaseHtml5Audio(sounds[i]._node);
         }
 
         // Empty out all of the nodes.
@@ -38292,18 +42088,18 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
         // Make sure all timers are cleared out.
         self._clearTimer(sounds[i]._id);
+      }
 
-        // Remove the references in the global Howler object.
-        var index = Howler._howls.indexOf(self);
-        if (index >= 0) {
-          Howler._howls.splice(index, 1);
-        }
+      // Remove the references in the global Howler object.
+      var index = Howler._howls.indexOf(self);
+      if (index >= 0) {
+        Howler._howls.splice(index, 1);
       }
 
       // Delete this sound from the cache (if no other Howl is using it).
       var remCache = true;
       for (i=0; i<Howler._howls.length; i++) {
-        if (Howler._howls[i]._src === self._src) {
+        if (Howler._howls[i]._src === self._src || self._src.indexOf(Howler._howls[i]._src) >= 0) {
           remCache = false;
           break;
         }
@@ -38517,7 +42313,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
       // When using a sprite, end the track.
       if (!self._webAudio && !loop) {
-        self.stop(sound._id);
+        self.stop(sound._id, true);
       }
 
       return self;
@@ -38669,7 +42465,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       sound._node.bufferSource.loop = sound._loop;
       if (sound._loop) {
         sound._node.bufferSource.loopStart = sound._start || 0;
-        sound._node.bufferSource.loopEnd = sound._stop;
+        sound._node.bufferSource.loopEnd = sound._stop || 0;
       }
       sound._node.bufferSource.playbackRate.setValueAtTime(sound._rate, Howler.ctx.currentTime);
 
@@ -38683,15 +42479,29 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
      */
     _cleanBuffer: function(node) {
       var self = this;
+      var isIOS = Howler._navigator && Howler._navigator.vendor.indexOf('Apple') >= 0;
 
-      if (Howler._scratchBuffer) {
+      if (Howler._scratchBuffer && node.bufferSource) {
         node.bufferSource.onended = null;
         node.bufferSource.disconnect(0);
-        try { node.bufferSource.buffer = Howler._scratchBuffer; } catch(e) {}
+        if (isIOS) {
+          try { node.bufferSource.buffer = Howler._scratchBuffer; } catch(e) {}
+        }
       }
       node.bufferSource = null;
 
       return self;
+    },
+
+    /**
+     * Set the source to a 0-second silence to stop any downloading (except in IE).
+     * @param  {Object} node Audio node to clear.
+     */
+    _clearSound: function(node) {
+      var checkIE = /MSIE |Trident\//.test(Howler._navigator && Howler._navigator.userAgent);
+      if (!checkIE) {
+        node.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+      }
     }
   };
 
@@ -38752,8 +42562,9 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
         self._node.gain.setValueAtTime(volume, Howler.ctx.currentTime);
         self._node.paused = true;
         self._node.connect(Howler.masterGain);
-      } else {
-        self._node = new Audio();
+      } else if (!Howler.noAudio) {
+        // Get an unlocked Audio object from the pool.
+        self._node = Howler._obtainHtml5Audio();
 
         // Listen for errors (http://dev.w3.org/html5/spec-author-view/spec.html#mediaerror).
         self._errorFn = self._errorListener.bind(self);
@@ -38919,16 +42730,28 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
    * @param  {Howl}        self
    */
   var decodeAudioData = function(arraybuffer, self) {
-    // Decode the buffer into an audio source.
-    Howler.ctx.decodeAudioData(arraybuffer, function(buffer) {
+    // Fire a load error if something broke.
+    var error = function() {
+      self._emit('loaderror', null, 'Decoding audio data failed.');
+    };
+
+    // Load the sound on success.
+    var success = function(buffer) {
       if (buffer && self._sounds.length > 0) {
         cache[self._src] = buffer;
         loadSound(self, buffer);
+      } else {
+        error();
       }
-    }, function() {
-      self._emit('loaderror', null, 'Decoding audio data failed.');
-    });
-  };
+    };
+
+    // Decode the buffer into an audio source.
+    if (typeof Promise !== 'undefined' && Howler.ctx.decodeAudioData.length === 1) {
+      Howler.ctx.decodeAudioData(arraybuffer).then(success).catch(error);
+    } else {
+      Howler.ctx.decodeAudioData(arraybuffer, success, error);
+    }
+  }
 
   /**
    * Sound is now loaded, so finish setting everything up and fire the loaded event.
@@ -38958,6 +42781,11 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
    * Setup the audio context when available, or switch to HTML5 Audio mode.
    */
   var setupAudioContext = function() {
+    // If we have already detected that Web Audio isn't supported, don't run this step again.
+    if (!Howler.usingWebAudio) {
+      return;
+    }
+
     // Check if we are using Web Audio and setup the AudioContext if we are.
     try {
       if (typeof AudioContext !== 'undefined') {
@@ -38968,6 +42796,11 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
         Howler.usingWebAudio = false;
       }
     } catch(e) {
+      Howler.usingWebAudio = false;
+    }
+
+    // If the audio context creation still failed, set using web audio to false.
+    if (!Howler.ctx) {
       Howler.usingWebAudio = false;
     }
 
@@ -38986,7 +42819,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
     // Create and expose the master GainNode when using Web Audio (useful for plugins or advanced usage).
     if (Howler.usingWebAudio) {
       Howler.masterGain = (typeof Howler.ctx.createGain === 'undefined') ? Howler.ctx.createGainNode() : Howler.ctx.createGain();
-      Howler.masterGain.gain.setValueAtTime(Howler._muted ? 0 : 1, Howler.ctx.currentTime);
+      Howler.masterGain.gain.setValueAtTime(Howler._muted ? 0 : Howler._volume, Howler.ctx.currentTime);
       Howler.masterGain.connect(Howler.ctx.destination);
     }
 
@@ -39028,10 +42861,10 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 /*!
  *  Spatial Plugin - Adds support for stereo and 3D audio where Web Audio is supported.
  *  
- *  howler.js v2.0.9
+ *  howler.js v2.1.3
  *  howlerjs.com
  *
- *  (c) 2013-2018, James Simpson of GoldFire Studios
+ *  (c) 2013-2019, James Simpson of GoldFire Studios
  *  goldfirestudios.com
  *
  *  MIT License
@@ -39044,7 +42877,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
   // Setup default properties.
   HowlerGlobal.prototype._pos = [0, 0, 0];
   HowlerGlobal.prototype._orientation = [0, 0, -1, 0, 1, 0];
-  
+
   /** Global Methods **/
   /***************************************************************************/
 
@@ -39092,7 +42925,14 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
     if (typeof x === 'number') {
       self._pos = [x, y, z];
-      self.ctx.listener.setPosition(self._pos[0], self._pos[1], self._pos[2]);
+
+      if (typeof self.ctx.listener.positionX !== 'undefined') {
+        self.ctx.listener.positionX.setTargetAtTime(self._pos[0], Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.positionY.setTargetAtTime(self._pos[1], Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.positionZ.setTargetAtTime(self._pos[2], Howler.ctx.currentTime, 0.1);
+      } else {
+        self.ctx.listener.setPosition(self._pos[0], self._pos[1], self._pos[2]);
+      }
     } else {
       return self._pos;
     }
@@ -39132,7 +42972,17 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
     if (typeof x === 'number') {
       self._orientation = [x, y, z, xUp, yUp, zUp];
-      self.ctx.listener.setOrientation(x, y, z, xUp, yUp, zUp);
+
+      if (typeof self.ctx.listener.forwardX !== 'undefined') {
+        self.ctx.listener.forwardX.setTargetAtTime(x, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.forwardY.setTargetAtTime(y, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.forwardZ.setTargetAtTime(z, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.upX.setTargetAtTime(xUp, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.upY.setTargetAtTime(yUp, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.upZ.setTargetAtTime(zUp, Howler.ctx.currentTime, 0.1);
+      } else {
+        self.ctx.listener.setOrientation(x, y, z, xUp, yUp, zUp);
+      }
     } else {
       return or;
     }
@@ -39238,7 +43088,13 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
             }
 
             if (pannerType === 'spatial') {
-              sound._panner.setPosition(pan, 0, 0);
+              if (typeof sound._panner.positionX !== 'undefined') {
+                sound._panner.positionX.setValueAtTime(pan, Howler.ctx.currentTime);
+                sound._panner.positionY.setValueAtTime(0, Howler.ctx.currentTime);
+                sound._panner.positionZ.setValueAtTime(0, Howler.ctx.currentTime);
+              } else {
+                sound._panner.setPosition(pan, 0, 0);
+              }
             } else {
               sound._panner.pan.setValueAtTime(pan, Howler.ctx.currentTime);
             }
@@ -39312,7 +43168,13 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
               setupPanner(sound, 'spatial');
             }
 
-            sound._panner.setPosition(x, y, z);
+            if (typeof sound._panner.positionX !== 'undefined') {
+              sound._panner.positionX.setValueAtTime(x, Howler.ctx.currentTime);
+              sound._panner.positionY.setValueAtTime(y, Howler.ctx.currentTime);
+              sound._panner.positionZ.setValueAtTime(z, Howler.ctx.currentTime);
+            } else {
+              sound._panner.setPosition(x, y, z);
+            }
           }
 
           self._emit('pos', sound._id);
@@ -39390,7 +43252,13 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
               setupPanner(sound, 'spatial');
             }
 
-            sound._panner.setOrientation(x, y, z);
+            if (typeof sound._panner.orientationX !== 'undefined') {
+              sound._panner.orientationX.setValueAtTime(x, Howler.ctx.currentTime);
+              sound._panner.orientationY.setValueAtTime(y, Howler.ctx.currentTime);
+              sound._panner.orientationZ.setValueAtTime(z, Howler.ctx.currentTime);
+            } else {
+              sound._panner.setOrientation(x, y, z);
+            }
           }
 
           self._emit('orientation', sound._id);
@@ -39430,7 +43298,7 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
    *                     with `inverse` and `exponential`.
    *     panningModel - ('HRTF' by default) Determines which spatialization algorithm is used to position audio.
    *                     Can be `HRTF` or `equalpower`.
-   * 
+   *
    * @return {Howl/Object} Returns self or current panner attributes.
    */
   Howl.prototype.pannerAttr = function() {
@@ -39575,8 +43443,21 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
       // Reset all spatial plugin properties on this sound.
       self._orientation = parent._orientation;
+      self._stereo = parent._stereo;
       self._pos = parent._pos;
       self._pannerAttr = parent._pannerAttr;
+
+      // If a stereo or position was specified, set it up.
+      if (self._stereo) {
+        parent.stereo(self._stereo);
+      } else if (self._pos) {
+        parent.pos(self._pos[0], self._pos[1], self._pos[2], self._id);
+      } else if (self._panner) {
+        // Disconnect the panner.
+        self._panner.disconnect(0);
+        self._panner = undefined;
+        parent._refreshBuffer(self);
+      }
 
       // Complete resetting of the sound.
       return _super.call(this);
@@ -39605,8 +43486,22 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
       sound._panner.refDistance = sound._pannerAttr.refDistance;
       sound._panner.rolloffFactor = sound._pannerAttr.rolloffFactor;
       sound._panner.panningModel = sound._pannerAttr.panningModel;
-      sound._panner.setPosition(sound._pos[0], sound._pos[1], sound._pos[2]);
-      sound._panner.setOrientation(sound._orientation[0], sound._orientation[1], sound._orientation[2]);
+
+      if (typeof sound._panner.positionX !== 'undefined') {
+        sound._panner.positionX.setValueAtTime(sound._pos[0], Howler.ctx.currentTime);
+        sound._panner.positionY.setValueAtTime(sound._pos[1], Howler.ctx.currentTime);
+        sound._panner.positionZ.setValueAtTime(sound._pos[2], Howler.ctx.currentTime);
+      } else {
+        sound._panner.setPosition(sound._pos[0], sound._pos[1], sound._pos[2]);
+      }
+
+      if (typeof sound._panner.orientationX !== 'undefined') {
+        sound._panner.orientationX.setValueAtTime(sound._orientation[0], Howler.ctx.currentTime);
+        sound._panner.orientationY.setValueAtTime(sound._orientation[1], Howler.ctx.currentTime);
+        sound._panner.orientationZ.setValueAtTime(sound._orientation[2], Howler.ctx.currentTime);
+      } else {
+        sound._panner.setOrientation(sound._orientation[0], sound._orientation[1], sound._orientation[2]);
+      }
     } else {
       sound._panner = Howler.ctx.createStereoPanner();
       sound._panner.pan.setValueAtTime(sound._stereo, Howler.ctx.currentTime);
@@ -39623,6 +43518,533 @@ ___scope___.file("dist/howler.js", function(exports, require, module, __filename
 
 });
 return ___scope___.entry = "dist/howler.js";
+});
+FuseBox.pkg("subtitle", {}, function(___scope___){
+___scope___.file("dist/subtitle.bundle.js", function(exports, require, module, __filename, __dirname){
+
+(function webpackUniversalModuleDefinition(root, factory) {
+	if(typeof exports === 'object' && typeof module === 'object')
+		module.exports = factory();
+	else if(typeof define === 'function' && define.amd)
+		define([], factory);
+	else if(typeof exports === 'object')
+		exports["Subtitle"] = factory();
+	else
+		root["Subtitle"] = factory();
+})(typeof self !== 'undefined' ? self : this, function() {
+return /******/ (function(modules) { // webpackBootstrap
+/******/ 	// The module cache
+/******/ 	var installedModules = {};
+/******/
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/
+/******/ 		// Check if module is in cache
+/******/ 		if(installedModules[moduleId]) {
+/******/ 			return installedModules[moduleId].exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = installedModules[moduleId] = {
+/******/ 			i: moduleId,
+/******/ 			l: false,
+/******/ 			exports: {}
+/******/ 		};
+/******/
+/******/ 		// Execute the module function
+/******/ 		modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/
+/******/ 		// Flag the module as loaded
+/******/ 		module.l = true;
+/******/
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/
+/******/
+/******/ 	// expose the modules object (__webpack_modules__)
+/******/ 	__webpack_require__.m = modules;
+/******/
+/******/ 	// expose the module cache
+/******/ 	__webpack_require__.c = installedModules;
+/******/
+/******/ 	// define getter function for harmony exports
+/******/ 	__webpack_require__.d = function(exports, name, getter) {
+/******/ 		if(!__webpack_require__.o(exports, name)) {
+/******/ 			Object.defineProperty(exports, name, {
+/******/ 				configurable: false,
+/******/ 				enumerable: true,
+/******/ 				get: getter
+/******/ 			});
+/******/ 		}
+/******/ 	};
+/******/
+/******/ 	// getDefaultExport function for compatibility with non-harmony modules
+/******/ 	__webpack_require__.n = function(module) {
+/******/ 		var getter = module && module.__esModule ?
+/******/ 			function getDefault() { return module['default']; } :
+/******/ 			function getModuleExports() { return module; };
+/******/ 		__webpack_require__.d(getter, 'a', getter);
+/******/ 		return getter;
+/******/ 	};
+/******/
+/******/ 	// Object.prototype.hasOwnProperty.call
+/******/ 	__webpack_require__.o = function(object, property) { return Object.prototype.hasOwnProperty.call(object, property); };
+/******/
+/******/ 	// __webpack_public_path__
+/******/ 	__webpack_require__.p = "";
+/******/
+/******/ 	// Load entry module and return exports
+/******/ 	return __webpack_require__(__webpack_require__.s = 5);
+/******/ })
+/************************************************************************/
+/******/ ([
+/* 0 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = toMS;
+/**
+ * Return the given SRT timestamp as milleseconds.
+ * @param {string|number} timestamp
+ * @returns {number} milliseconds
+ */
+
+function toMS(timestamp) {
+  if (!isNaN(timestamp)) {
+    return timestamp;
+  }
+
+  var match = timestamp.match(/^(?:(\d{2,}):)?(\d{2}):(\d{2})[,.](\d{3})$/);
+
+  if (!match) {
+    throw new Error('Invalid SRT or VTT time format: "' + timestamp + '"');
+  }
+
+  var hours = match[1] ? parseInt(match[1], 10) * 3600000 : 0;
+  var minutes = parseInt(match[2], 10) * 60000;
+  var seconds = parseInt(match[3], 10) * 1000;
+  var milliseconds = parseInt(match[4], 10);
+
+  return hours + minutes + seconds + milliseconds;
+}
+
+/***/ }),
+/* 1 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = toSrtTime;
+
+var _zeroFill = __webpack_require__(2);
+
+var _zeroFill2 = _interopRequireDefault(_zeroFill);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+/**
+ * Return the given milliseconds as SRT timestamp.
+ * @param timestamp
+ * @returns {string}
+ */
+
+function toSrtTime(timestamp) {
+  if (isNaN(timestamp)) {
+    return timestamp;
+  }
+
+  var date = new Date(0, 0, 0, 0, 0, 0, timestamp);
+
+  var hours = (0, _zeroFill2.default)(2, date.getHours());
+  var minutes = (0, _zeroFill2.default)(2, date.getMinutes());
+  var seconds = (0, _zeroFill2.default)(2, date.getSeconds());
+  var ms = timestamp - (hours * 3600000 + minutes * 60000 + seconds * 1000);
+
+  return hours + ':' + minutes + ':' + seconds + ',' + (0, _zeroFill2.default)(3, ms);
+} /**
+   * Module dependencies.
+   */
+
+/***/ }),
+/* 2 */
+/***/ (function(module, exports) {
+
+/**
+ * Given a number, return a zero-filled string.
+ * From http://stackoverflow.com/questions/1267283/
+ * @param  {number} width
+ * @param  {number} number
+ * @return {string}
+ */
+module.exports = function zeroFill (width, number, pad) {
+  if (number === undefined) {
+    return function (number, pad) {
+      return zeroFill(width, number, pad)
+    }
+  }
+  if (pad === undefined) pad = '0'
+  width -= number.toString().length
+  if (width > 0) return new Array(width + (/\./.test(number) ? 2 : 1)).join(pad) + number
+  return number + ''
+}
+
+
+/***/ }),
+/* 3 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = toVttTime;
+
+var _zeroFill = __webpack_require__(2);
+
+var _zeroFill2 = _interopRequireDefault(_zeroFill);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+/**
+ * Return the given milliseconds as WebVTT timestamp.
+ * @param timestamp
+ * @returns {string}
+ */
+
+function toVttTime(timestamp) {
+  if (isNaN(timestamp)) {
+    return timestamp;
+  }
+
+  var date = new Date(0, 0, 0, 0, 0, 0, timestamp);
+
+  var hours = (0, _zeroFill2.default)(2, date.getHours());
+  var minutes = (0, _zeroFill2.default)(2, date.getMinutes());
+  var seconds = (0, _zeroFill2.default)(2, date.getSeconds());
+  var ms = timestamp - (hours * 3600000 + minutes * 60000 + seconds * 1000);
+
+  return hours + ':' + minutes + ':' + seconds + '.' + (0, _zeroFill2.default)(3, ms);
+} /**
+   * Module dependencies.
+   */
+
+/***/ }),
+/* 4 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = parseTimestamps;
+
+var _toMS = __webpack_require__(0);
+
+var _toMS2 = _interopRequireDefault(_toMS);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+/**
+ * Timestamp regex
+ * @type {RegExp}
+ */
+
+var RE = /^((?:\d{2,}:)?\d{2}:\d{2}[,.]\d{3}) --> ((?:\d{2,}:)?\d{2}:\d{2}[,.]\d{3})(?: (.*))?$/;
+
+/**
+ * parseTimestamps
+ * @param value
+ * @returns {{start: Number, end: Number}}
+ */
+
+/**
+ * Module dependencies.
+ */
+
+function parseTimestamps(value) {
+  var match = RE.exec(value);
+  if (match) {
+    var cue = {
+      start: (0, _toMS2.default)(match[1]),
+      end: (0, _toMS2.default)(match[2])
+    };
+    if (match[3]) {
+      cue.settings = match[3];
+    }
+    return cue;
+  }
+}
+
+/***/ }),
+/* 5 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _toMS = __webpack_require__(0);
+
+Object.defineProperty(exports, 'toMS', {
+  enumerable: true,
+  get: function get() {
+    return _interopRequireDefault(_toMS).default;
+  }
+});
+
+var _toSrtTime = __webpack_require__(1);
+
+Object.defineProperty(exports, 'toSrtTime', {
+  enumerable: true,
+  get: function get() {
+    return _interopRequireDefault(_toSrtTime).default;
+  }
+});
+
+var _toVttTime = __webpack_require__(3);
+
+Object.defineProperty(exports, 'toVttTime', {
+  enumerable: true,
+  get: function get() {
+    return _interopRequireDefault(_toVttTime).default;
+  }
+});
+
+var _parse = __webpack_require__(6);
+
+Object.defineProperty(exports, 'parse', {
+  enumerable: true,
+  get: function get() {
+    return _interopRequireDefault(_parse).default;
+  }
+});
+
+var _stringify = __webpack_require__(7);
+
+Object.defineProperty(exports, 'stringify', {
+  enumerable: true,
+  get: function get() {
+    return _interopRequireDefault(_stringify).default;
+  }
+});
+
+var _stringifyVtt = __webpack_require__(8);
+
+Object.defineProperty(exports, 'stringifyVtt', {
+  enumerable: true,
+  get: function get() {
+    return _interopRequireDefault(_stringifyVtt).default;
+  }
+});
+
+var _resync = __webpack_require__(9);
+
+Object.defineProperty(exports, 'resync', {
+  enumerable: true,
+  get: function get() {
+    return _interopRequireDefault(_resync).default;
+  }
+});
+
+var _parseTimestamps = __webpack_require__(4);
+
+Object.defineProperty(exports, 'parseTimestamps', {
+  enumerable: true,
+  get: function get() {
+    return _interopRequireDefault(_parseTimestamps).default;
+  }
+});
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+/***/ }),
+/* 6 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = parse;
+
+var _parseTimestamps = __webpack_require__(4);
+
+var _parseTimestamps2 = _interopRequireDefault(_parseTimestamps);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+/**
+ * Parse a SRT or WebVTT string.
+ * @param {String} srtOrVtt
+ * @return {Array} subtitles
+ */
+
+function parse(srtOrVtt) {
+  if (!srtOrVtt) return [];
+
+  var source = srtOrVtt.trim().concat('\n').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/^WEBVTT.*\n(?:.*: .*\n)*\n/, '').split('\n');
+
+  return source.reduce(function (captions, row, index) {
+    var caption = captions[captions.length - 1];
+
+    if (!caption.index) {
+      if (/^\d+$/.test(row)) {
+        caption.index = parseInt(row, 10);
+        return captions;
+      }
+    }
+
+    if (!caption.hasOwnProperty('start')) {
+      var timestamp = (0, _parseTimestamps2.default)(row);
+      if (timestamp) {
+        Object.assign(caption, timestamp);
+      } else if (captions.length > 1) {
+        captions[captions.length - 2].text += '\n' + row;
+      }
+      return captions;
+    }
+
+    if (row === '') {
+      delete caption.index;
+      if (index !== source.length - 1) {
+        captions.push({});
+      }
+    } else {
+      caption.text = caption.text ? caption.text + '\n' + row : row;
+    }
+
+    return captions;
+  }, [{}]);
+} /**
+   * Module dependencies.
+   */
+
+/***/ }),
+/* 7 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = stringify;
+
+var _toSrtTime = __webpack_require__(1);
+
+var _toSrtTime2 = _interopRequireDefault(_toSrtTime);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+/**
+ * Stringify the given array of captions.
+ * @param {Array} captions
+ * @return {String} srt
+ */
+
+function stringify(captions) {
+  return captions.map(function (caption, index) {
+    return (index > 0 ? '\n' : '') + [index + 1, (0, _toSrtTime2.default)(caption.start) + ' --> ' + (0, _toSrtTime2.default)(caption.end), caption.text].join('\n');
+  }).join('\n') + '\n';
+} /**
+   * Module dependencies.
+   */
+
+/***/ }),
+/* 8 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = stringifyVtt;
+
+var _toVttTime = __webpack_require__(3);
+
+var _toVttTime2 = _interopRequireDefault(_toVttTime);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+/**
+ * Stringify the given array of captions to WebVTT format.
+ * @param {Array} captions
+ * @return {String} webVtt
+ */
+
+function stringifyVtt(captions) {
+  return 'WEBVTT\n\n' + captions.map(function (caption, index) {
+    return (index > 0 ? '\n' : '') + [index + 1, (0, _toVttTime2.default)(caption.start) + ' --> ' + (0, _toVttTime2.default)(caption.end) + (caption.settings ? ' ' + caption.settings : ''), caption.text].join('\n');
+  }).join('\n') + '\n';
+} /**
+   * Module dependencies.
+   */
+
+/***/ }),
+/* 9 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = resync;
+
+var _toMS = __webpack_require__(0);
+
+var _toMS2 = _interopRequireDefault(_toMS);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+/**
+ * Resync the given subtitles.
+ * @param captions
+ * @param time
+ * @returns {Array|*}
+ */
+
+function resync(captions, time) {
+  return captions.map(function (caption) {
+    var start = (0, _toMS2.default)(caption.start) + time;
+    var end = (0, _toMS2.default)(caption.end) + time;
+
+    return Object.assign({}, caption, {
+      start: start,
+      end: end
+    });
+  });
+} /**
+   * Module dependencies.
+   */
+
+/***/ })
+/******/ ]);
+});
+});
+return ___scope___.entry = "dist/subtitle.bundle.js";
 });
 FuseBox.pkg("@haztivity/hz-anim", {}, function(___scope___){
 ___scope___.file("dist/HzAnim.js", function(exports, require, module, __filename, __dirname){

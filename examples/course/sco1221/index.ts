@@ -11,6 +11,7 @@ import {page as page6611} from "./pages/6611/page";
 import {page as page6612} from "./pages/6612/page";
 import {page as page6613} from "./pages/6613/page";
 import {page as page6614} from "./pages/6614/page";
+import {page as page6615} from "./pages/6615/page";
 import template from "./sco.pug";
 let sco: ISco = ScoFactory.createSco(
     {
@@ -20,7 +21,8 @@ let sco: ISco = ScoFactory.createSco(
             page6611,
             page6612,
             page6614,
-            page6613
+            page6613,
+            page6615
         ],
         components: [
             HzNavbarComponent
@@ -29,5 +31,5 @@ let sco: ISco = ScoFactory.createSco(
 );
 
 //error
-sco.on();
 sco.run();
+

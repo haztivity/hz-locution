@@ -11,11 +11,6 @@ html, body {
     color: black;
 }
 
-*:not('#mkdbuttons') {
-    margin: 0;
-    padding: 0;
-}
-
 .markdown-wrapper {
     font: 15px helvetica, arial, freesans, clean, sans-serif;
     -webkit-font-smoothing: antialiased;
