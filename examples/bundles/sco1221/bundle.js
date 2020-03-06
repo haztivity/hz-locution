@@ -10654,6 +10654,7 @@ require("./markdown.scss");
 require("./prism-github.scss");
 var core_1 = require("@haztivity/core");
 var hz_navbar_1 = require("@haztivity/hz-navbar");
+var HzLocutionSubtitlesBarComponent_1 = require("../resources/hz-locution/HzLocutionSubtitlesBarComponent");
 var page_1 = require("./pages/6611/page");
 var page_2 = require("./pages/6612/page");
 var page_3 = require("./pages/6613/page");
@@ -10664,14 +10665,15 @@ var sco = core_1.ScoFactory.createSco({
     name: "1221",
     template: sco_pug_1.default,
     pages: [
+        page_5.page,
         page_1.page,
         page_2.page,
         page_4.page,
-        page_3.page,
-        page_5.page
+        page_3.page
     ],
     components: [
-        hz_navbar_1.HzNavbarComponent
+        hz_navbar_1.HzNavbarComponent,
+        HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent
     ]
 });
 //error
@@ -10690,59 +10692,164 @@ ___scope___.file("sco1221/prism-github.scss", function(exports, require, module,
 
 __fsbx_css("sco1221/prism-github.scss", "/* prism-github */\n/**\r\n * prism.js Github theme based on GitHub's theme.\r\n * @author Sam Clarke\r\n */\ncode[class*=\"language-\"],\npre[class*=\"language-\"] {\n  color: #333;\n  background: none;\n  font-family: Consolas, \"Liberation Mono\", Menlo, Courier, monospace;\n  text-align: left;\n  white-space: pre;\n  word-spacing: normal;\n  word-break: normal;\n  word-wrap: normal;\n  line-height: 1.4;\n  -moz-tab-size: 8;\n  -o-tab-size: 8;\n  tab-size: 8;\n  -webkit-hyphens: none;\n  -moz-hyphens: none;\n  -ms-hyphens: none;\n  hyphens: none;\n}\n\n/* Code blocks */\npre[class*=\"language-\"] {\n  padding: .8em;\n  overflow: auto;\n  border: 1px solid #ddd;\n  border-radius: 3px;\n  background: #fff;\n}\n\n/* Inline code */\n:not(pre) > code[class*=\"language-\"] {\n  padding: .1em;\n  border-radius: .3em;\n  white-space: normal;\n  background: #f5f5f5;\n}\n\n.token.comment,\n.token.blockquote {\n  color: #969896;\n}\n\n.token.cdata {\n  color: #183691;\n}\n\n.token.doctype,\n.token.punctuation,\n.token.variable,\n.token.macro.property {\n  color: #333;\n}\n\n.token.operator,\n.token.important,\n.token.keyword,\n.token.rule,\n.token.builtin {\n  color: #a71d5d;\n}\n\n.token.string,\n.token.url,\n.token.regex,\n.token.attr-value {\n  color: #183691;\n}\n\n.token.property,\n.token.number,\n.token.boolean,\n.token.entity,\n.token.atrule,\n.token.constant,\n.token.symbol,\n.token.command,\n.token.code {\n  color: #0086b3;\n}\n\n.token.tag,\n.token.selector,\n.token.prolog {\n  color: #63a35c;\n}\n\n.token.function,\n.token.namespace,\n.token.pseudo-element,\n.token.class,\n.token.class-name,\n.token.pseudo-class,\n.token.id,\n.token.url-reference .token.variable,\n.token.attr-name {\n  color: #795da3;\n}\n\n.token.entity {\n  cursor: help;\n}\n\n.token.title,\n.token.title .token.punctuation {\n  font-weight: bold;\n  color: #1d3e81;\n}\n\n.token.list {\n  color: #ed6a43;\n}\n\n.token.inserted {\n  background-color: #eaffea;\n  color: #55a532;\n}\n\n.token.deleted {\n  background-color: #ffecec;\n  color: #bd2c00;\n}\n\n.token.bold {\n  font-weight: bold;\n}\n\n.token.italic {\n  font-style: italic;\n}\n\n/* JSON */\n.language-json .token.property {\n  color: #183691;\n}\n\n.language-markup .token.tag .token.punctuation {\n  color: #333;\n}\n\n/* CSS */\ncode.language-css,\n.language-css .token.function {\n  color: #0086b3;\n}\n\n/* YAML */\n.language-yaml .token.atrule {\n  color: #63a35c;\n}\n\ncode.language-yaml {\n  color: #183691;\n}\n\n/* Ruby */\n.language-ruby .token.function {\n  color: #333;\n}\n\n/* Markdown */\n.language-markdown .token.url {\n  color: #795da3;\n}\n\n/* Makefile */\n.language-makefile .token.symbol {\n  color: #795da3;\n}\n\n.language-makefile .token.variable {\n  color: #183691;\n}\n\n.language-makefile .token.builtin {\n  color: #0086b3;\n}\n\n/* Bash */\n.language-bash .token.keyword {\n  color: #0086b3;\n}\n\n/* End prism-github */\n\n/*# sourceMappingURL=prism-github.scss.map */");
 });
-___scope___.file("sco1221/pages/6611/page.js", function(exports, require, module, __filename, __dirname){
+___scope___.file("resources/hz-locution/HzLocutionSubtitlesBarComponent.js", function(exports, require, module, __filename, __dirname){
 
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-/**
- * @license
- * Copyright Davinchi. All Rights Reserved.
- */
 var core_1 = require("@haztivity/core");
-var page_pug_1 = require("./page.pug");
-var HzLocution_1 = require("../../../resources/hz-locution/HzLocution");
-exports.page = core_1.PageFactory.createPage({
-    name: "6611",
-    resources: [
-        HzLocution_1.HzLocutionResource
-    ],
-    template: page_pug_1.default
-});
-exports.page.on(core_1.PageController.ON_RENDERING, null, function (eventObject, template, pageController) {
-    console.log(pageController.options.name + " rendering");
-});
-exports.page.on(core_1.PageController.ON_RENDERED, null, function (eventObject, $page, pageController) {
-    console.log(pageController.options.name + " rendered");
-});
-exports.page.on(core_1.PageController.ON_SHOW, null, function (eventObject, $page, $oldPage, oldPageRelativePosition, pageController) {
-    console.log(pageController.options.name + " show start");
-});
-exports.page.on(core_1.PageController.ON_SHOWN, null, function (eventObject, $page, $oldPage, oldPageRelativePosition, pageController) {
-    console.log(pageController.options.name + " show end");
-});
-exports.page.on(core_1.PageController.ON_COMPLETE_CHANGE, null, function (eventObject, isCompleted, $page, pageController) {
-    console.log(pageController.options.name + " complete change");
-});
-exports.page.on(core_1.PageController.ON_DESTROY, null, function (eventObject, $page, pageController) {
-    console.log(pageController.options.name + " destroy");
-});
-//# sourceMappingURL=page.js.map
-});
-___scope___.file("sco1221/pages/6611/page.pug", function(exports, require, module, __filename, __dirname){
-
-module.exports.default =  "\n<div>\n  <h1 data-hz-resource=\"HzLocution\" data-opt-hz-locution-files=\"./assets/short.mp3\">Test simple</h1>\n</div>";
-});
-___scope___.file("resources/hz-locution/HzLocution.js", function(exports, require, module, __filename, __dirname){
-
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-/**
- * @license
- * Copyright Davinchi. All Rights Reserved.
- */
 var HzLocutionResource_1 = require("./HzLocutionResource");
-exports.HzLocutionResource = HzLocutionResource_1.HzLocutionResource;
-//# sourceMappingURL=HzLocution.js.map
+var HzLocutionSubtitlesBarComponent = /** @class */ (function (_super) {
+    __extends(HzLocutionSubtitlesBarComponent, _super);
+    function HzLocutionSubtitlesBarComponent(_$, _EventEmitterFactory, _Navigator, _PageManager, _DataOptions) {
+        var _this = _super.call(this, _$, _EventEmitterFactory) || this;
+        _this._Navigator = _Navigator;
+        _this._PageManager = _PageManager;
+        _this._DataOptions = _DataOptions;
+        _this.currentLocutions = [];
+        return _this;
+    }
+    HzLocutionSubtitlesBarComponent_1 = HzLocutionSubtitlesBarComponent;
+    HzLocutionSubtitlesBarComponent.prototype.init = function (options, config) {
+        this._options = this._$.extend(true, {}, HzLocutionSubtitlesBarComponent_1.DEFAULTS, options);
+        this._config = config;
+        this._getElements();
+        this._assignEvents();
+        if (this._options.subtitlesDisabled) {
+            this.disable();
+        }
+        else {
+            this.enable();
+        }
+    };
+    HzLocutionSubtitlesBarComponent.prototype._getElements = function () {
+        this._$content = this._$element.find(HzLocutionSubtitlesBarComponent_1.QUERY_CUE);
+        this._$toggleBtn = this._$element.find(HzLocutionSubtitlesBarComponent_1.QUERY_ACTION_TOGGLE);
+    };
+    HzLocutionSubtitlesBarComponent.prototype._assignEvents = function () {
+        this._eventEmitter.globalEmitter.on(core_1.PageController.ON_SHOW, { instance: this }, this._onPageShown);
+        //this._eventEmitter.globalEmitter.on(HzLocutionResource.ON_CUE_CHANGE, {instance: this}, this._onCueChange);
+        //this._eventEmitter.globalEmitter.on(HzLocutionResource.ON_END, {instance: this}, this._onLocutionEnd);
+        //this._eventEmitter.globalEmitter.on(HzLocutionResource.ON_PLAY, {instance: this}, this._onLocutionPlay);
+        this._$toggleBtn.on("click." + HzLocutionSubtitlesBarComponent_1.NAMESPACE, { instance: this }, this._onToggleClick);
+    };
+    HzLocutionSubtitlesBarComponent.prototype._onPageShown = function (e, $page, $oldPage, oldPageRelativePosition, pageController) {
+        var instance = e.data.instance;
+        instance.currentLocutions = pageController.getElement().find("[data-hz-resource='HzLocution']").toArray().map(function (l) { return instance._$.data(l, "hzResourceInstance"); });
+        instance.currentLocutions.forEach(function (l) {
+            l.off("." + HzLocutionSubtitlesBarComponent_1.NAMESPACE);
+            l.on(HzLocutionResource_1.HzLocutionResource.ON_PLAY + "." + HzLocutionSubtitlesBarComponent_1.NAMESPACE, { instance: instance }, instance._onLocutionPlay);
+            l.on(HzLocutionResource_1.HzLocutionResource.ON_END + "." + HzLocutionSubtitlesBarComponent_1.NAMESPACE, { instance: instance }, instance._onLocutionEnd);
+            l.on(HzLocutionResource_1.HzLocutionResource.ON_CUE_CHANGE + "." + HzLocutionSubtitlesBarComponent_1.NAMESPACE, { instance: instance }, instance._onCueChange);
+            if (instance.subtitlesDisabled) {
+                l.disableSubtitles();
+            }
+            else {
+                l.enableSubtitles();
+            }
+        });
+    };
+    HzLocutionSubtitlesBarComponent.prototype._onCueChange = function (e, locutionResource, cue) {
+        var instance = e.data.instance;
+        var text = cue ? cue.text.trim() : "";
+        instance._$content.html(text);
+        if (text.length == 0 && !instance.subtitlesDisabled) {
+            instance._$element.addClass(HzLocutionSubtitlesBarComponent_1.CLASS_EMPTY);
+        }
+        else {
+            instance._$element.removeClass(HzLocutionSubtitlesBarComponent_1.CLASS_EMPTY);
+        }
+    };
+    HzLocutionSubtitlesBarComponent.prototype._onLocutionEnd = function (e, locutionResource) {
+        var instance = e.data.instance;
+        instance._$element.removeAttr(HzLocutionSubtitlesBarComponent_1.ATTR_SUBTITLES_BAR);
+    };
+    HzLocutionSubtitlesBarComponent.prototype._onLocutionPlay = function (e, locutionResource) {
+        var instance = e.data.instance;
+        instance._$element.attr(HzLocutionSubtitlesBarComponent_1.ATTR_SUBTITLES_BAR, locutionResource.id);
+    };
+    HzLocutionSubtitlesBarComponent.prototype._onToggleClick = function (e) {
+        var instance = e.data.instance;
+        if (instance.subtitlesDisabled) {
+            instance.enable();
+        }
+        else {
+            instance.disable();
+        }
+    };
+    HzLocutionSubtitlesBarComponent.prototype.enable = function () {
+        this._options.subtitlesDisabled = false;
+        this.currentLocutions.forEach(function (l) { return l.enableSubtitles(); });
+        this._$element.removeClass(HzLocutionSubtitlesBarComponent_1.CLASS_DISABLED);
+        this._eventEmitter.trigger(HzLocutionSubtitlesBarComponent_1.ON_SUBTITLES_ENABLED);
+    };
+    HzLocutionSubtitlesBarComponent.prototype.disable = function () {
+        this._options.subtitlesDisabled = true;
+        this.currentLocutions.forEach(function (l) { return l.disableSubtitles(); });
+        this._$element.addClass(HzLocutionSubtitlesBarComponent_1.CLASS_DISABLED);
+        this._eventEmitter.trigger(HzLocutionSubtitlesBarComponent_1.ON_SUBTITLES_DISABLED);
+    };
+    HzLocutionSubtitlesBarComponent.prototype.setContent = function (content) {
+        if (content === void 0) { content = ""; }
+        this._$content.html(content);
+        if (content.trim().length > 0) {
+            this._$element.removeClass(HzLocutionSubtitlesBarComponent_1.CLASS_EMPTY);
+        }
+        else {
+            this._$element.addClass(HzLocutionSubtitlesBarComponent_1.CLASS_EMPTY);
+        }
+    };
+    Object.defineProperty(HzLocutionSubtitlesBarComponent.prototype, "subtitlesDisabled", {
+        get: function () {
+            return this._options.subtitlesDisabled;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    HzLocutionSubtitlesBarComponent.NAMESPACE = "hzLocutionSubtitlesBar";
+    HzLocutionSubtitlesBarComponent.ON_SUBTITLES_ENABLED = HzLocutionSubtitlesBarComponent_1.NAMESPACE + ":subtitlesEnabled";
+    HzLocutionSubtitlesBarComponent.ON_SUBTITLES_DISABLED = HzLocutionSubtitlesBarComponent_1.NAMESPACE + ":subtitlesDisabled";
+    HzLocutionSubtitlesBarComponent.PREFIX = "hz-locution-subtitles-bar";
+    HzLocutionSubtitlesBarComponent.QUERY_ACTION_TOGGLE = "[data-" + HzLocutionSubtitlesBarComponent_1.PREFIX + "-toggler]";
+    HzLocutionSubtitlesBarComponent.QUERY_CUE = "[data-" + HzLocutionSubtitlesBarComponent_1.PREFIX + "-cue]";
+    HzLocutionSubtitlesBarComponent.CLASS_DISABLED = "hz-locution-subtitles-bar--disabled";
+    HzLocutionSubtitlesBarComponent.CLASS_EMPTY = "hz-locution-subtitles-bar--empty";
+    HzLocutionSubtitlesBarComponent.ATTR_SUBTITLES_BAR = "hz-locution-id";
+    HzLocutionSubtitlesBarComponent.DEFAULTS = {
+        subtitlesDisabled: false
+    };
+    HzLocutionSubtitlesBarComponent = HzLocutionSubtitlesBarComponent_1 = __decorate([
+        core_1.Component({
+            name: "HzLocutionSubtitlesBar",
+            dependencies: [
+                core_1.$,
+                core_1.EventEmitterFactory,
+                core_1.Navigator,
+                core_1.PageManager,
+                core_1.DataOptions
+            ]
+        })
+    ], HzLocutionSubtitlesBarComponent);
+    return HzLocutionSubtitlesBarComponent;
+    var HzLocutionSubtitlesBarComponent_1;
+}(core_1.ComponentController));
+exports.HzLocutionSubtitlesBarComponent = HzLocutionSubtitlesBarComponent;
+//# sourceMappingURL=HzLocutionSubtitlesBarComponent.js.map
 });
 ___scope___.file("resources/hz-locution/HzLocutionResource.js", function(exports, require, module, __filename, __dirname){
 
@@ -10806,12 +10913,6 @@ var HzLocutionResource = /** @class */ (function (_super) {
         this.initializationDefer = this._$.Deferred();
         var subtitlesContainer = this._options.subtitlesContainer ? core_2.ScoFactory.getCurrentSco()._$context.find(this._options.subtitlesContainer) : core_1.$("<div></div>");
         this.$subtitlesContainer = subtitlesContainer;
-        if (subtitlesContainer.data("hzComponentInstance") != null) {
-            this.subtitlesBarComponent = subtitlesContainer.data("hzComponentInstance");
-            this._options.subtitlesDisabled = this.subtitlesBarComponent.subtitlesDisabled;
-            this.subtitlesBarComponent.on(HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.NAMESPACE + this._id + "." + HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.ON_SUBTITLES_ENABLED, { instance: this }, this._onBarEnable);
-            this.subtitlesBarComponent.on(HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.NAMESPACE + this._id + "." + HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.ON_SUBTITLES_DISABLED, { instance: this }, this._onBarDisable);
-        }
         var subtitlesPromise = this.processSubtitles();
         subtitlesPromise.always(function () {
             var sound = new howler_1.Howl({
@@ -10894,10 +10995,10 @@ var HzLocutionResource = /** @class */ (function (_super) {
     HzLocutionResource.prototype._onEnd = function () {
         this.stop();
         this._markAsCompleted();
-        this._eventEmitter.trigger(HzLocutionResource_1.ON_END);
+        this._eventEmitter.trigger(HzLocutionResource_1.ON_END, this);
     };
     HzLocutionResource.prototype._onLoad = function () {
-        this._eventEmitter.trigger(HzLocutionResource_1.ON_LOADED);
+        this._eventEmitter.trigger(HzLocutionResource_1.ON_LOADED, this);
     };
     HzLocutionResource.prototype._onLoadError = function (e, error) {
         if (this._interval) {
@@ -10905,7 +11006,7 @@ var HzLocutionResource = /** @class */ (function (_super) {
         }
         this._markAsCompleted();
         core_1.Logger.error("HzLocution", error);
-        this._eventEmitter.trigger(HzLocutionResource_1.ON_LOAD_ERROR, error);
+        this._eventEmitter.trigger(HzLocutionResource_1.ON_LOAD_ERROR, [this, error]);
     };
     HzLocutionResource.prototype._onPlayError = function (e, error) {
         if (this._interval) {
@@ -10913,11 +11014,11 @@ var HzLocutionResource = /** @class */ (function (_super) {
         }
         this._markAsCompleted();
         core_1.Logger.error("HzLocution", arguments);
-        this._eventEmitter.trigger(HzLocutionResource_1.ON_PLAY_ERROR);
+        this._eventEmitter.trigger(HzLocutionResource_1.ON_PLAY_ERROR, [this, error]);
     };
     HzLocutionResource.prototype._onPlay = function () {
         this.registerSubtitlesInterval();
-        this._eventEmitter.trigger(HzLocutionResource_1.ON_PLAY);
+        this._eventEmitter.trigger(HzLocutionResource_1.ON_PLAY, this);
     };
     HzLocutionResource.prototype._onChangePageStart = function () {
         var _this = this;
@@ -10932,7 +11033,7 @@ var HzLocutionResource = /** @class */ (function (_super) {
         }
     };
     HzLocutionResource.prototype.registerSubtitlesInterval = function () {
-        if (this.subtitles && !this.subtitlesDisabled && this._sound && this._sound.playing()) {
+        if (this.subtitles && !this.subtitlesDisabled && this._sound && this.isPlaying) {
             this.clearInterval();
             this._interval = setInterval(this._onTimeInterval.bind(this), 100);
         }
@@ -10946,55 +11047,65 @@ var HzLocutionResource = /** @class */ (function (_super) {
     HzLocutionResource.prototype._onTimeInterval = function () {
         this._syncSubtitles();
     };
-    HzLocutionResource.prototype.updateSubtitlesContent = function (content) {
-        if (this._sound && this._sound.playing()) {
-            if (this.subtitlesBarComponent) {
-                this.subtitlesBarComponent.setContent(content);
-            }
-            else {
-                this.$subtitlesContainer.html(content);
-                if (content.trim().length > 0) {
+    HzLocutionResource.prototype.setCurrentCue = function (cue) {
+        if (this.isPlaying) {
+            if (this.currentSubtitle != cue) {
+                this.currentSubtitle = cue;
+                var cueText = cue ? cue.text.trim() : "";
+                this.updateSubtitlesContent(cueText);
+                if (cueText.length > 0) {
                     this.$subtitlesContainer.removeClass(HzLocutionResource_1.CLASS_SUBTITLES_EMPTY);
                 }
                 else {
                     this.$subtitlesContainer.addClass(HzLocutionResource_1.CLASS_SUBTITLES_EMPTY);
                 }
+                this._eventEmitter.trigger(HzLocutionResource_1.ON_CUE_CHANGE, [this, cue]);
+                this._eventEmitter.globalEmitter.trigger(HzLocutionResource_1.ON_CUE_CHANGE, [this, cue]);
             }
         }
+    };
+    HzLocutionResource.prototype.updateSubtitlesContent = function (content) {
+        this.$subtitlesContainer.html(content);
     };
     HzLocutionResource.prototype.enableSubtitles = function () {
         this._options.subtitlesDisabled = false;
         this._$element.removeClass(HzLocutionResource_1.CLASS_SUBTITLES_DISABLED);
         this.syncSubtitles();
         this.registerSubtitlesInterval();
+        this._eventEmitter.trigger(HzLocutionResource_1.ON_SUBTITLES_ENABLED, this);
+        this._eventEmitter.globalEmitter.trigger(HzLocutionResource_1.ON_SUBTITLES_ENABLED, this);
     };
     HzLocutionResource.prototype.disableSubtitles = function () {
         this.clearInterval();
         this._options.subtitlesDisabled = true;
         this._$element.addClass(HzLocutionResource_1.CLASS_SUBTITLES_DISABLED);
-        this.currentSubtitle = null;
-        this.updateSubtitlesContent("");
+        this.syncSubtitles();
+        this._eventEmitter.trigger(HzLocutionResource_1.ON_SUBTITLES_DISABLED, this);
+        this._eventEmitter.globalEmitter.trigger(HzLocutionResource_1.ON_SUBTITLES_DISABLED, this);
     };
     HzLocutionResource.prototype.syncSubtitles = function () {
         if (!this.subtitlesDisabled && this.subtitles) {
-            if (this._sound && this._sound.playing()) {
+            if (this._sound && this.isPlaying) {
                 this._syncSubtitles();
             }
         }
         else {
             this.clearInterval();
-            this.updateSubtitlesContent("");
+            this.setCurrentCue(null);
         }
     };
     HzLocutionResource.prototype._syncSubtitles = function () {
         var currentTime = this._sound.seek() * 1000;
-        var subtitlesForTime = this.subtitles.find(function (s) { return currentTime >= s.start && currentTime <= s.end; });
-        if (this.currentSubtitle != subtitlesForTime) {
-            this.updateSubtitlesContent(subtitlesForTime ? subtitlesForTime.text : "");
-            this.currentSubtitle = subtitlesForTime;
-            this._eventEmitter.trigger(HzLocutionResource_1.ON_CUE_CHANGE, subtitlesForTime);
-        }
+        var cue = this.subtitles.find(function (s) { return currentTime >= s.start && currentTime <= s.end; });
+        this.setCurrentCue(cue);
     };
+    Object.defineProperty(HzLocutionResource.prototype, "isPlaying", {
+        get: function () {
+            return this._sound && this._sound.playing();
+        },
+        enumerable: true,
+        configurable: true
+    });
     HzLocutionResource.prototype.play = function (force) {
         var _this = this;
         if (force === void 0) { force = false; }
@@ -11056,8 +11167,8 @@ var HzLocutionResource = /** @class */ (function (_super) {
             this._sound.unload();
         }
         if (this.subtitlesBarComponent) {
-            this.subtitlesBarComponent.off(HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.NAMESPACE + this._id + "." + HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.ON_SUBTITLES_ENABLED);
-            this.subtitlesBarComponent.off(HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.NAMESPACE + this._id + "." + HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.ON_SUBTITLES_DISABLED);
+            this.subtitlesBarComponent.off(HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.NAMESPACE + this.id + "." + HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.ON_SUBTITLES_ENABLED);
+            this.subtitlesBarComponent.off(HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.NAMESPACE + this.id + "." + HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent.ON_SUBTITLES_DISABLED);
         }
         _super.prototype.destroy.call(this);
     };
@@ -11101,6 +11212,62 @@ var HzLocutionResource = /** @class */ (function (_super) {
 }(core_1.ResourceController));
 exports.HzLocutionResource = HzLocutionResource;
 //# sourceMappingURL=HzLocutionResource.js.map
+});
+___scope___.file("sco1221/pages/6611/page.js", function(exports, require, module, __filename, __dirname){
+
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+/**
+ * @license
+ * Copyright Davinchi. All Rights Reserved.
+ */
+var core_1 = require("@haztivity/core");
+var page_pug_1 = require("./page.pug");
+var HzLocution_1 = require("../../../resources/hz-locution/HzLocution");
+exports.page = core_1.PageFactory.createPage({
+    name: "6611",
+    resources: [
+        HzLocution_1.HzLocutionResource
+    ],
+    template: page_pug_1.default
+});
+exports.page.on(core_1.PageController.ON_RENDERING, null, function (eventObject, template, pageController) {
+    console.log(pageController.options.name + " rendering");
+});
+exports.page.on(core_1.PageController.ON_RENDERED, null, function (eventObject, $page, pageController) {
+    console.log(pageController.options.name + " rendered");
+});
+exports.page.on(core_1.PageController.ON_SHOW, null, function (eventObject, $page, $oldPage, oldPageRelativePosition, pageController) {
+    console.log(pageController.options.name + " show start");
+});
+exports.page.on(core_1.PageController.ON_SHOWN, null, function (eventObject, $page, $oldPage, oldPageRelativePosition, pageController) {
+    console.log(pageController.options.name + " show end");
+});
+exports.page.on(core_1.PageController.ON_COMPLETE_CHANGE, null, function (eventObject, isCompleted, $page, pageController) {
+    console.log(pageController.options.name + " complete change");
+});
+exports.page.on(core_1.PageController.ON_DESTROY, null, function (eventObject, $page, pageController) {
+    console.log(pageController.options.name + " destroy");
+});
+//# sourceMappingURL=page.js.map
+});
+___scope___.file("sco1221/pages/6611/page.pug", function(exports, require, module, __filename, __dirname){
+
+module.exports.default =  "\n<div>\n  <h1 data-hz-resource=\"HzLocution\" data-opt-hz-locution-files=\"./assets/short.mp3\">Test simple</h1>\n</div>";
+});
+___scope___.file("resources/hz-locution/HzLocution.js", function(exports, require, module, __filename, __dirname){
+
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+/**
+ * @license
+ * Copyright Davinchi. All Rights Reserved.
+ */
+var HzLocutionResource_1 = require("./HzLocutionResource");
+exports.HzLocutionResource = HzLocutionResource_1.HzLocutionResource;
+var HzLocutionSubtitlesBarComponent_1 = require("./HzLocutionSubtitlesBarComponent");
+exports.HzLocutionSubtitlesBarComponent = HzLocutionSubtitlesBarComponent_1.HzLocutionSubtitlesBarComponent;
+//# sourceMappingURL=HzLocution.js.map
 });
 ___scope___.file("sco1221/pages/6612/page.js", function(exports, require, module, __filename, __dirname){
 
@@ -11257,6 +11424,15 @@ exports.page.on(core_1.PageController.ON_RENDERED, null, function (eventObject, 
     console.log(pageController.options.name + " rendered");
     var toggle = $page.find("#toggle");
     var locutions = $page.find(".locution");
+    //locutions.on(HzLocutionResource.ON_PLAY,(e, instance)=>{
+    //    console.log("play",instance.id);
+    //});
+    //locutions.on(HzLocutionResource.ON_SUBTITLES_DISABLED,(e, instance)=>{
+    //    console.log("disabled",instance.id);
+    //});
+    //locutions.on(HzLocutionResource.ON_CUE_CHANGE,(e, instance, cue)=>{
+    //    console.log("cue change",instance.id, cue);
+    //});
     toggle.on("click", function () {
         locutions.each(function (i, l) {
             var instance = $.data(l, "hzResourceInstance");
@@ -11285,11 +11461,11 @@ exports.page.on(core_1.PageController.ON_DESTROY, null, function (eventObject, $
 });
 ___scope___.file("sco1221/pages/6615/page.pug", function(exports, require, module, __filename, __dirname){
 
-module.exports.default =  "\n<div>\n  <h1 class=\"locution\" id=\"l1\" data-hz-resource=\"HzLocution\" data-opt-hz-locution-files=\"./assets/voice.mp3\" data-opt-hz-locution-subtitles=\"./assets/voice_es.vtt\" data-opt-hz-locution-subtitles-container=\"#6615-subtitles\">Test simple</h1>\n  <h1 class=\"locution\" data-hz-resource=\"HzLocution\" data-opt-hz-locution-files=\"./assets/long.mp3\" data-opt-hz-locution-subtitles=\"./assets/long_es.vtt\" data-opt-hz-locution-subtitles-container=\"#6615-subtitles\">Test simple 2</h1>\n  <div id=\"6615-subtitles\"></div>\n  <button id=\"toggle\">Toggle</button>\n</div>";
+module.exports.default =  "\n<div>\n  <h1 class=\"locution\" id=\"l1\" data-hz-resource=\"HzLocution\" data-opt-hz-locution-files=\"./assets/voice.mp3\" data-opt-hz-locution-subtitles=\"./assets/voice_es.vtt\">Test simple</h1>\n  <h1 class=\"locution\" data-hz-resource=\"HzLocution\" data-opt-hz-locution-files=\"./assets/long.mp3\" data-opt-hz-locution-subtitles=\"./assets/long_es.vtt\">Test simple 2</h1>\n</div>";
 });
 ___scope___.file("sco1221/sco.pug", function(exports, require, module, __filename, __dirname){
 
-module.exports.default =  "\n<div data-hz-pages=\"data-hz-pages\"></div>\n<div class=\"hz-navbar\" data-hz-component=\"HzNavbar\">\n  <div class=\"hz-navbar__progress\">\n    <div class=\"hz-navbar__progress-bar\">\n      <div class=\"hz-navbar__progress-mask\"></div>\n      <div class=\"hz-navbar__progress-value\" data-hz-navbar-bar=\"data-hz-navbar-bar\"></div>\n    </div>\n    <div class=\"hz-navbar__content hz-navbar__progress-percentage\" data-hz-navbar-progress=\"data-hz-navbar-progress\"></div>\n  </div>\n  <div class=\"hz-navbar__actions\">\n    <button class=\"hz-navbar__btn hz-navbar__action-home\" data-hz-navbar-home=\"data-hz-navbar-home\" data-hz-navbar-content=\"home\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"home\"></span></button>\n    <button class=\"hz-navbar__btn hz-navbar__action-index\" data-hz-navbar-index=\"data-hz-navbar-index\" data-hz-navbar-content=\"showIndex\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"showIndex\"></span></button>\n    <button class=\"hz-navbar__btn hz-navbar__action-exit\" data-hz-navbar-exit=\"data-hz-navbar-exit\" data-hz-navbar-content=\"exit\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"exit\"></span></button>\n  </div>\n  <div class=\"hz-navbar__pager\">\n    <button class=\"hz-navbar__btn hz-navbar__prev\" data-hz-navbar-prev=\"data-hz-navbar-prev\" data-hz-navbar-content=\"prev\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"prev\"></span></button>\n    <p class=\"hz-navbar__pages\"><span class=\"hz-navbar__content hz-navbar__current\" data-hz-navbar-current=\"data-hz-navbar-current\" data-hz-navbar-content-to=\"title\" data-hz-navbar-content=\"currentPage\"></span><span class=\"hz-navbar__content hz-navbar__total\" data-hz-navbar-total=\"data-hz-navbar-total\" data-hz-navbar-content-to=\"title\" data-hz-navbar-content=\"totalPages\"></span></p>\n    <button class=\"hz-navbar__btn hz-navbar__next\" data-hz-navbar-next=\"data-hz-navbar-next\" data-hz-navbar-content=\"next\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"next\"></span></button>\n  </div>\n  <ul class=\"hz-navbar__dialog__body\" data-hz-navbar-index-list=\"data-hz-navbar-index-list\">\n    <li class=\"hz-navbar__index-item\" data-hz-navbar-index-list-item=\"data-hz-navbar-index-list-item\"><a class=\"hz-navbar__index-item-content\" data-hz-navbar-index-list-item-content=\"data-hz-navbar-index-list-item-content\" href=\"javascript:void(0)\"></a></li>\n  </ul>\n  <div class=\"hz-navbar__dialog__body\" data-hz-navbar-exit-dialog=\"data-hz-navbar-exit-dialog\">\n    <p data-hz-navbar-content=\"exitMessage\"></p>\n  </div>\n</div>";
+module.exports.default =  "\n<div data-hz-pages=\"data-hz-pages\"></div>\n<div class=\"hz-locution-subtitles-bar\" data-hz-component=\"HzLocutionSubtitlesBar\">\n  <p class=\"hz-locution-subtitles-bar__cue\" data-hz-locution-subtitles-bar-cue=\"data-hz-locution-subtitles-bar-cue\"></p>\n  <button class=\"hz-locution-subtitles-bar__toggler\" data-hz-locution-subtitles-bar-toggler=\"data-hz-locution-subtitles-bar-toggler\">Toggle Subtitles</button>\n</div>\n<div class=\"hz-navbar\" data-hz-component=\"HzNavbar\">\n  <div class=\"hz-navbar__progress\">\n    <div class=\"hz-navbar__progress-bar\">\n      <div class=\"hz-navbar__progress-mask\"></div>\n      <div class=\"hz-navbar__progress-value\" data-hz-navbar-bar=\"data-hz-navbar-bar\"></div>\n    </div>\n    <div class=\"hz-navbar__content hz-navbar__progress-percentage\" data-hz-navbar-progress=\"data-hz-navbar-progress\"></div>\n  </div>\n  <div class=\"hz-navbar__actions\">\n    <button class=\"hz-navbar__btn hz-navbar__action-home\" data-hz-navbar-home=\"data-hz-navbar-home\" data-hz-navbar-content=\"home\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"home\"></span></button>\n    <button class=\"hz-navbar__btn hz-navbar__action-index\" data-hz-navbar-index=\"data-hz-navbar-index\" data-hz-navbar-content=\"showIndex\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"showIndex\"></span></button>\n    <button class=\"hz-navbar__btn hz-navbar__action-exit\" data-hz-navbar-exit=\"data-hz-navbar-exit\" data-hz-navbar-content=\"exit\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"exit\"></span></button>\n  </div>\n  <div class=\"hz-navbar__pager\">\n    <button class=\"hz-navbar__btn hz-navbar__prev\" data-hz-navbar-prev=\"data-hz-navbar-prev\" data-hz-navbar-content=\"prev\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"prev\"></span></button>\n    <p class=\"hz-navbar__pages\"><span class=\"hz-navbar__content hz-navbar__current\" data-hz-navbar-current=\"data-hz-navbar-current\" data-hz-navbar-content-to=\"title\" data-hz-navbar-content=\"currentPage\"></span><span class=\"hz-navbar__content hz-navbar__total\" data-hz-navbar-total=\"data-hz-navbar-total\" data-hz-navbar-content-to=\"title\" data-hz-navbar-content=\"totalPages\"></span></p>\n    <button class=\"hz-navbar__btn hz-navbar__next\" data-hz-navbar-next=\"data-hz-navbar-next\" data-hz-navbar-content=\"next\" data-hz-navbar-content-to=\"title\"><span class=\"hz-navbar__content\" data-hz-navbar-content=\"next\"></span></button>\n  </div>\n  <ul class=\"hz-navbar__dialog__body\" data-hz-navbar-index-list=\"data-hz-navbar-index-list\">\n    <li class=\"hz-navbar__index-item\" data-hz-navbar-index-list-item=\"data-hz-navbar-index-list-item\"><a class=\"hz-navbar__index-item-content\" data-hz-navbar-index-list-item-content=\"data-hz-navbar-index-list-item-content\" href=\"javascript:void(0)\"></a></li>\n  </ul>\n  <div class=\"hz-navbar__dialog__body\" data-hz-navbar-exit-dialog=\"data-hz-navbar-exit-dialog\">\n    <p data-hz-navbar-content=\"exitMessage\"></p>\n  </div>\n</div>";
 });
 });
 FuseBox.pkg("jquery", {}, function(___scope___){

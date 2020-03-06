@@ -24,15 +24,15 @@ page.on(
         console.log(`${pageController.options.name} rendered`);
         const toggle = $page.find("#toggle");
         const locutions = $page.find(".locution");
-        locutions.on(HzLocutionResource.ON_SUBTITLES_ENABLED,(e, instance)=>{
-            console.log("enabled",instance.id);
-        });
-        locutions.on(HzLocutionResource.ON_SUBTITLES_DISABLED,(e, instance)=>{
-            console.log("disabled",instance.id);
-        });
-        locutions.on(HzLocutionResource.ON_CUE_CHANGE,(e, instance, cue)=>{
-            console.log("cue change",instance.id, cue);
-        });
+        //locutions.on(HzLocutionResource.ON_PLAY,(e, instance)=>{
+        //    console.log("play",instance.id);
+        //});
+        //locutions.on(HzLocutionResource.ON_SUBTITLES_DISABLED,(e, instance)=>{
+        //    console.log("disabled",instance.id);
+        //});
+        //locutions.on(HzLocutionResource.ON_CUE_CHANGE,(e, instance, cue)=>{
+        //    console.log("cue change",instance.id, cue);
+        //});
         toggle.on("click",()=> {
             locutions.each((i,l)=>{
                 const instance = $.data(l,"hzResourceInstance");

@@ -186,7 +186,6 @@ export class HzLocutionResource extends ResourceController {
     protected _onPlay(){
         this.registerSubtitlesInterval();
         this._eventEmitter.trigger(HzLocutionResource.ON_PLAY,this);
-        this._eventEmitter.trigger(HzLocutionResource.ON_PLAY,this);
     }
     protected _onChangePageStart(){
         this.initializationDefer.always(()=> {
@@ -324,8 +323,8 @@ export class HzLocutionResource extends ResourceController {
             this._sound.unload();
         }
         if (this.subtitlesBarComponent) {
-            this.subtitlesBarComponent.off(HzLocutionSubtitlesBarComponent.NAMESPACE+this._id+"."+HzLocutionSubtitlesBarComponent.ON_SUBTITLES_ENABLED);
-            this.subtitlesBarComponent.off(HzLocutionSubtitlesBarComponent.NAMESPACE+this._id+"."+HzLocutionSubtitlesBarComponent.ON_SUBTITLES_DISABLED);
+            this.subtitlesBarComponent.off(HzLocutionSubtitlesBarComponent.NAMESPACE+this.id+"."+HzLocutionSubtitlesBarComponent.ON_SUBTITLES_ENABLED);
+            this.subtitlesBarComponent.off(HzLocutionSubtitlesBarComponent.NAMESPACE+this.id+"."+HzLocutionSubtitlesBarComponent.ON_SUBTITLES_DISABLED);
         }
         super.destroy();
     }
