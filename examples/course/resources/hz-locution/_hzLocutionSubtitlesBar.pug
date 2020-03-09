@@ -1,4 +1,6 @@
-mixin hz-locution-subtitles-bar(toggleText = "Toggle")
-    div.hz-locution-subtitles-bar(data-hz-component="HzLocutionSubtitlesBar")
+mixin hz-locution-subtitles-bar(params)
+    -
+        params = params || {}
+    div.hz-locution-subtitles-bar(data-hz-component="HzLocutionSubtitlesBar", data-opt-hz-locution-subtitles-bar-subtitles-disabled=params.subtitlesDisabled)
         p.hz-locution-subtitles-bar__cue(data-hz-locution-subtitles-bar-cue)
-        button.hz-locution-subtitles-bar__toggler(data-hz-locution-subtitles-bar-toggler)= toggleText
+        button.hz-locution-subtitles-bar__toggler(data-hz-locution-subtitles-bar-toggler)= params.toggleText
