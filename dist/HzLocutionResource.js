@@ -2,7 +2,7 @@ var __extends = (this && this.__extends) || (function () {
     var extendStatics = function (d, b) {
         extendStatics = Object.setPrototypeOf ||
             ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
         return extendStatics(d, b);
     };
     return function (d, b) {
@@ -28,6 +28,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 })(function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    exports.HzLocutionResource = exports.HzLocutionRuntime = void 0;
     /**
      * @license
      * Copyright Davinchi. All Rights Reserved.
@@ -66,7 +67,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
             this._options = this._$.extend(true, {}, HzLocutionResource_1.DEFAULTS, options);
             this.id = this._options.id || this._$element.attr("id") || Date.now().toString();
             this._config = config;
-            this._navigatorService.on(core_1.NavigatorService.ON_CHANGE_PAGE_START, this._onChangePageStart.bind(this));
+            this._eventEmitter.globalEmitter.on(core_1.NavigatorService.ON_CHANGE_PAGE_START + (".locution-" + this.id), {}, this._onChangePageStart.bind(this));
             this.initializationDefer = this._$.Deferred();
             var subtitlesContainer = this._options.subtitlesContainer ? core_2.ScoFactory.getCurrentSco()._$context.find(this._options.subtitlesContainer) : core_1.$("<div></div>");
             this.$subtitlesContainer = subtitlesContainer;
@@ -98,7 +99,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
             get: function () {
                 return this._options.subtitlesDisabled;
             },
-            enumerable: true,
+            enumerable: false,
             configurable: true
         });
         HzLocutionResource.prototype.processSubtitles = function () {
@@ -182,6 +183,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
             this.initializationDefer.always(function () {
                 _this.stop();
             });
+            this._eventEmitter.globalEmitter.off(core_1.NavigatorService.ON_CHANGE_PAGE_START + (".locution-" + this.id));
         };
         HzLocutionResource.prototype._onFinish = function () {
             this.stop();
@@ -190,7 +192,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
             }
         };
         HzLocutionResource.prototype.registerSubtitlesInterval = function () {
-            if (this.subtitles && !this.subtitlesDisabled && this._sound && this.isPlaying) {
+            if (this.subtitles && this.subtitles.length > 0 && !this.subtitlesDisabled && this._sound && this.isPlaying) {
                 this.clearInterval();
                 this._interval = setInterval(this._onTimeInterval.bind(this), 100);
             }
@@ -260,7 +262,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
             get: function () {
                 return this._sound && this._sound.playing();
             },
-            enumerable: true,
+            enumerable: false,
             configurable: true
         });
         HzLocutionResource.prototype.play = function (force) {

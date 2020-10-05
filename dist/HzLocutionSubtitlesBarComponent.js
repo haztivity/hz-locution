@@ -2,7 +2,7 @@ var __extends = (this && this.__extends) || (function () {
     var extendStatics = function (d, b) {
         extendStatics = Object.setPrototypeOf ||
             ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
         return extendStatics(d, b);
     };
     return function (d, b) {
@@ -28,6 +28,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 })(function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    exports.HzLocutionSubtitlesBarComponent = void 0;
     var core_1 = require("@haztivity/core");
     var HzLocutionResource_1 = require("./HzLocutionResource");
     var HzLocutionSubtitlesBarComponent = /** @class */ (function (_super) {
@@ -134,7 +135,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
             get: function () {
                 return this._options.subtitlesDisabled;
             },
-            enumerable: true,
+            enumerable: false,
             configurable: true
         });
         var HzLocutionSubtitlesBarComponent_1;
