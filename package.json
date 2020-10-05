@@ -33,20 +33,20 @@
     "@haztivity/cli": "^0.5.4",
     "@haztivity/hz-anim": "^0.7.0",
     "@haztivity/hz-navbar": "^0.7.7",
-    "@types/core-js": "^0.9.46",
+    "@types/core-js": "^2.5.3",
     "@types/jquery": "^3.3.33",
     "@types/loglevel": "^1.6.3",
     "@types/prismjs": "^1.16.0",
     "@types/string": "0.0.29",
-    "autoprefixer": "^8.1.0",
-    "commander": "^2.15.1",
+    "autoprefixer": "^9.7.4",
+    "commander": "^4.1.1",
     "jstransformer-markdown-it": "^2.1.0",
     "merge2": "^1.3.0",
     "node-sass": "^4.13.1",
-    "postcss": "^6.0.20",
+    "postcss": "^7.0.27",
     "prismjs": "^1.19.0",
     "pug": "^2.0.4",
     "require-dir": "^1.2.0",
-    "typescript": "^2.7.2"
+    "typescript": "^3.8.3"
   }
 }

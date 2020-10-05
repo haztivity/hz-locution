@@ -81,7 +81,7 @@ export class HzLocutionResource extends ResourceController {
         this._options = this._$.extend(true,{},HzLocutionResource.DEFAULTS,options);
         this.id = this._options.id || this._$element.attr("id") || Date.now().toString();
         this._config = config;
-        this._navigatorService.on(NavigatorService.ON_CHANGE_PAGE_START,this._onChangePageStart.bind(this));
+        this._eventEmitter.globalEmitter.on(Navigator.ON_CHANGE_PAGE_START,{},this._onChangePageStart.bind(this));
         this.initializationDefer = this._$.Deferred();
         const subtitlesContainer = this._options.subtitlesContainer ? ScoFactory.getCurrentSco()._$context.find(this._options.subtitlesContainer) : $("<div></div>");
         this.$subtitlesContainer = subtitlesContainer;
@@ -199,7 +199,7 @@ export class HzLocutionResource extends ResourceController {
         }
     }
     protected registerSubtitlesInterval() {
-        if(this.subtitles && !this.subtitlesDisabled && this._sound && this.isPlaying) {
+        if(this.subtitles && this.subtitles.length > 0 && !this.subtitlesDisabled && this._sound && this.isPlaying) {
             this.clearInterval();
             this._interval = setInterval(this._onTimeInterval.bind(this),100);
         }
