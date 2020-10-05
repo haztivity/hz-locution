@@ -81,7 +81,7 @@ export class HzLocutionResource extends ResourceController {
         this._options = this._$.extend(true,{},HzLocutionResource.DEFAULTS,options);
         this.id = this._options.id || this._$element.attr("id") || Date.now().toString();
         this._config = config;
-        this._eventEmitter.globalEmitter.on(Navigator.ON_CHANGE_PAGE_START,{},this._onChangePageStart.bind(this));
+        this._eventEmitter.globalEmitter.on(NavigatorService.ON_CHANGE_PAGE_START+`.locution-${this.id}`,{},this._onChangePageStart.bind(this));
         this.initializationDefer = this._$.Deferred();
         const subtitlesContainer = this._options.subtitlesContainer ? ScoFactory.getCurrentSco()._$context.find(this._options.subtitlesContainer) : $("<div></div>");
         this.$subtitlesContainer = subtitlesContainer;
@@ -191,6 +191,7 @@ export class HzLocutionResource extends ResourceController {
         this.initializationDefer.always(()=> {
             this.stop();
         });
+        this._eventEmitter.globalEmitter.off(NavigatorService.ON_CHANGE_PAGE_START+`.locution-${this.id}`);
     }
     protected _onFinish(){
         this.stop();
@@ -318,7 +319,6 @@ export class HzLocutionResource extends ResourceController {
         }
     }
     public destroy(){
-
         if(this._sound){
             this._sound.unload();
         }
