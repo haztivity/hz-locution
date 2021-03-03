@@ -45,7 +45,7 @@
     "node-sass": "^4.13.1",
     "postcss": "^7.0.27",
     "prismjs": "^1.19.0",
-    "pug": "^2.0.4",
+    "pug": "^3.0.1",
     "require-dir": "^1.2.0",
     "typescript": "^3.8.3"
   }
